@@ -1,0 +1,28 @@
+export interface ProcessingStatus {
+  totalWords: number
+  processedWords: number
+  currentWord: string
+  isProcessing: boolean
+  error?: string
+  results: ProcessedWord[]
+}
+
+export interface ProcessedWord {
+  originalWord: string
+  language: string
+  englishTranslation: string
+  category: string
+}
+
+export interface UploadedFiles {
+  categories: string[]
+  languages: string[]
+  words: string[]
+}
+
+export interface ProcessingResult {
+  originalWord: string
+  language: string
+  englishTranslation: string
+  category: string
+} 
