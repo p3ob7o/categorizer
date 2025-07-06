@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
         await updateSessionStatus(sessionId, {
           status: 'completed',
           processedWords: words.length,
-          currentWord: null,
+          currentWord: undefined,
         })
       }).catch(async (error) => {
         console.error(`❌ Batch processing failed:`, error)
