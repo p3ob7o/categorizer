@@ -53,4 +53,7 @@ Thumbs.db
 
 # Temporary files
 *.tmp
-*.temp 
+*.temp
+
+# Prisma
+prisma/migrations/

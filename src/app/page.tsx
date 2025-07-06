@@ -132,15 +132,22 @@ export default function Home() {
   const handleReset = async () => {
     try {
       setError(null)
-      await fetch('/api/process', {
+      const response = await fetch('/api/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'reset' })
       })
-      setProgress(null)
-      setIsProcessing(false)
-      setFilesStatus(null)
-      await loadStatus()
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        setProgress(null)
+        setIsProcessing(false)
+        setFilesStatus(null)
+        await loadStatus()
+      } else {
+        setError(data.error || 'Reset failed')
+      }
     } catch (error) {
       setError('Reset failed')
     }

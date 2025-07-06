@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processBatch } from '@/lib/openai'
-import { saveProgress, loadProgress, exportToCSV } from '@/lib/storage'
-import { loadFilesStatus } from '@/lib/storage'
+import { getCurrentSessionId, clearSession } from '@/lib/session'
+import { getSession, updateSessionStatus, saveResult, getResultsForExport, deleteSession } from '@/lib/db'
 import { ProcessingStatus } from '@/types'
+import { exportToCSV } from '@/lib/storage'
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,102 +11,110 @@ export async function POST(request: NextRequest) {
     const { action, model, langPrompt, catPrompt } = body;
 
     if (action === 'start') {
-      // Load uploaded files
-      const filesStatus = loadFilesStatus()
-      if (!filesStatus || !filesStatus.words.length || !filesStatus.categories.length) {
+      const sessionId = await getCurrentSessionId()
+      if (!sessionId) {
+        return NextResponse.json({ 
+          error: 'No active session. Please upload files first.' 
+        }, { status: 400 })
+      }
+
+      const session = await getSession(sessionId)
+      if (!session) {
+        return NextResponse.json({ 
+          error: 'Session not found' 
+        }, { status: 404 })
+      }
+
+      if (!session.words.length || !session.categories.length) {
         return NextResponse.json({ 
           error: 'Please upload categories and words files first' 
         }, { status: 400 })
       }
 
-      // Check for existing progress
-      const existingProgress = loadProgress()
-      const startIndex = existingProgress ? existingProgress.processedWords : 0
-      const existingResults = existingProgress ? existingProgress.results : []
-
-      // Initialize or update progress
-      const progress: ProcessingStatus = {
-        totalWords: filesStatus.words.length,
-        processedWords: startIndex,
-        currentWord: filesStatus.words[startIndex] || '',
-        isProcessing: true,
-        results: existingResults
+      // Check if already processing
+      if (session.status === 'processing') {
+        return NextResponse.json({ 
+          error: 'Already processing' 
+        }, { status: 400 })
       }
 
-      saveProgress(progress)
+      // Get words and categories
+      const words = session.words.map(w => w.originalWord)
+      const categories = session.categories.map(c => c.name)
+      const languages = session.languages.map(l => l.name)
+
+      // Determine start index based on existing results
+      const startIndex = session.results.length
+
+      // Update session status to processing
+      await updateSessionStatus(sessionId, {
+        status: 'processing',
+        processedWords: startIndex,
+        error: null
+      })
 
       // Start processing in background
-      console.log(`🚀 Starting batch processing for ${filesStatus.words.length} words`)
-      console.log(`📊 Categories: ${filesStatus.categories.length}`)
-      console.log(`🌍 Languages: ${filesStatus.languages?.length || 0}`)
+      console.log(`🚀 Starting batch processing for ${words.length} words`)
+      console.log(`📊 Categories: ${categories.length}`)
+      console.log(`🌍 Languages: ${languages.length}`)
       
-      // Fix: accumulate results as we go
-      const currentResults: any[] = []
       processBatch(
-        filesStatus.words,
-        filesStatus.categories,
-        filesStatus.languages || [],
+        words,
+        categories,
+        languages,
         startIndex,
-        (result, currentIndex, totalWords) => {
-          currentResults.push(result)
-          const updatedResults = [...existingResults, ...currentResults]
-          const updatedProgress: ProcessingStatus = {
-            totalWords,
+        async (result, currentIndex, totalWords) => {
+          // Save result to database
+          await saveResult(sessionId, result)
+          
+          // Update progress
+          await updateSessionStatus(sessionId, {
             processedWords: currentIndex,
-            currentWord: filesStatus.words[currentIndex] || '',
-            isProcessing: true,
-            results: updatedResults
-          }
-          saveProgress(updatedProgress)
+            currentWord: words[currentIndex] || '',
+          })
         },
         model,
         langPrompt,
         catPrompt
-      ).then((results) => {
-        console.log(`✅ Batch processing completed. Processed ${results.length} words`)
-        const finalProgress: ProcessingStatus = {
-          totalWords: filesStatus.words.length,
-          processedWords: filesStatus.words.length,
-          currentWord: '',
-          isProcessing: false,
-          results: [...existingResults, ...results]
-        }
-        saveProgress(finalProgress)
-      }).catch((error) => {
+      ).then(async () => {
+        console.log(`✅ Batch processing completed`)
+        await updateSessionStatus(sessionId, {
+          status: 'completed',
+          processedWords: words.length,
+          currentWord: null,
+        })
+      }).catch(async (error) => {
         console.error(`❌ Batch processing failed:`, error)
-        const errorProgress: ProcessingStatus = {
-          totalWords: filesStatus.words.length,
-          processedWords: startIndex,
-          currentWord: '',
-          isProcessing: false,
+        await updateSessionStatus(sessionId, {
+          status: 'error',
           error: error.message,
-          results: existingResults
-        }
-        saveProgress(errorProgress)
+        })
       })
 
-      return NextResponse.json({ success: true, progress })
-    }
-
-    if (action === 'status') {
-      const progress = loadProgress()
-      return NextResponse.json({ progress })
+      return NextResponse.json({ success: true })
     }
 
     if (action === 'export') {
-      const progress = loadProgress()
-      if (!progress || !progress.results.length) {
+      const sessionId = await getCurrentSessionId()
+      if (!sessionId) {
+        return NextResponse.json({ error: 'No active session' }, { status: 400 })
+      }
+
+      const results = await getResultsForExport(sessionId)
+      if (!results.length) {
         return NextResponse.json({ error: 'No results to export' }, { status: 400 })
       }
 
-      const csvPath = exportToCSV(progress.results)
+      const csvPath = exportToCSV(results)
       return NextResponse.json({ success: true, csvPath })
     }
 
     if (action === 'reset') {
-      const { clearProgress, clearFilesStatus } = await import('@/lib/storage')
-      clearProgress()
-      clearFilesStatus()
+      const sessionId = await getCurrentSessionId()
+      if (sessionId) {
+        await deleteSession(sessionId)
+      }
+      await clearSession()
       return NextResponse.json({ success: true })
     }
 
