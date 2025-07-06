@@ -4,7 +4,7 @@ import { createSession, getSession } from './db'
 const SESSION_COOKIE_NAME = 'categorizer_session'
 
 export async function getOrCreateSession() {
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)
   
   if (sessionCookie?.value) {
@@ -28,12 +28,12 @@ export async function getOrCreateSession() {
 }
 
 export async function getCurrentSessionId() {
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)
   return sessionCookie?.value
 }
 
 export async function clearSession() {
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   cookieStore.delete(SESSION_COOKIE_NAME)
 } 
