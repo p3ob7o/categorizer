@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getOrCreateSession } from '@/lib/session'
-import { saveCategories, saveLanguages, saveWords } from '@/lib/db'
+import { saveCategories, saveLanguages, saveWords, getSession } from '@/lib/db'
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,20 +37,20 @@ export async function POST(request: NextRequest) {
         }, { status: 400 })
     }
 
-    // Return updated session status
-    const status = {
-      categories: session.categories.map(c => c.name),
-      languages: session.languages.map(l => l.name),
-      words: session.words.map(w => w.originalWord),
+    // Get updated session with all relations
+    const updatedSession = await getSession(session.id)
+    
+    if (!updatedSession) {
+      return NextResponse.json({ 
+        error: 'Session not found' 
+      }, { status: 404 })
     }
 
-    // If this is a new upload of the same type, we need to refresh the data
-    if (fileType === 'categories') {
-      status.categories = lines
-    } else if (fileType === 'languages') {
-      status.languages = lines
-    } else if (fileType === 'words') {
-      status.words = lines
+    // Return updated session status
+    const status = {
+      categories: updatedSession.categories.map(c => c.name),
+      languages: updatedSession.languages.map(l => l.name),
+      words: updatedSession.words.map(w => w.originalWord),
     }
 
     return NextResponse.json({ 
