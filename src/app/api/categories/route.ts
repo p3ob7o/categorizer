@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { prisma, withConnection } from '@/lib/db';
 
 export async function GET() {
   try {
-    const categories = await prisma.category.findMany({
-      orderBy: { name: 'asc' },
+    const categories = await withConnection(async () => {
+      return prisma.category.findMany({
+        orderBy: { name: 'asc' },
+      });
     });
     
     return NextResponse.json(categories);
@@ -29,8 +31,10 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const category = await prisma.category.create({
-      data: { name: name.trim() },
+    const category = await withConnection(async () => {
+      return prisma.category.create({
+        data: { name: name.trim() },
+      });
     });
     
     return NextResponse.json(category);

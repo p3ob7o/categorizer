@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { prisma, withConnection } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,12 +25,14 @@ export async function GET(request: NextRequest) {
       };
     }
     
-    const words = await prisma.word.findMany({
-      where,
-      include: {
-        language: true,
-      },
-      orderBy: { word: 'asc' },
+    const words = await withConnection(async () => {
+      return prisma.word.findMany({
+        where,
+        include: {
+          language: true,
+        },
+        orderBy: { word: 'asc' },
+      });
     });
     
     return NextResponse.json(words);
@@ -65,11 +67,13 @@ export async function POST(request: NextRequest) {
       wordData.languageId = parseInt(languageId);
     }
     
-    const newWord = await prisma.word.create({
-      data: wordData,
-      include: {
-        language: true,
-      },
+    const newWord = await withConnection(async () => {
+      return prisma.word.create({
+        data: wordData,
+        include: {
+          language: true,
+        },
+      });
     });
     
     return NextResponse.json(newWord);

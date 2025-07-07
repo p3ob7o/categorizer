@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processWord } from '@/lib/openai'
-import { prisma } from '@/lib/db'
+import { prisma, withRetry, withConnection, safeDisconnect } from '@/lib/db'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { mode = 'batch', model = 'gpt-4o-mini', langPrompt, catPrompt, wordIds } = body
 
-    // Get data from database with connection management
-    const [categories, languages] = await Promise.all([
-      prisma.category.findMany({ orderBy: { name: 'asc' } }),
-      prisma.language.findMany({ orderBy: [{ priority: 'asc' }, { name: 'asc' }] })
-    ])
+    // Get data from database with connection management and retry logic
+    const [categories, languages] = await withConnection(async () => {
+      return Promise.all([
+        prisma.category.findMany({ orderBy: { name: 'asc' } }),
+        prisma.language.findMany({ orderBy: [{ priority: 'asc' }, { name: 'asc' }] })
+      ])
+    })
 
     if (!categories.length) {
       return NextResponse.json({ 
@@ -20,19 +22,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Get words based on filters
-    let words
-    if (wordIds && wordIds.length > 0) {
-      words = await prisma.word.findMany({
-        where: { id: { in: wordIds } },
-        include: { language: true },
-        orderBy: { word: 'asc' }
-      })
-    } else {
-      words = await prisma.word.findMany({
-        include: { language: true },
-        orderBy: { word: 'asc' }
-      })
-    }
+    const words = await withConnection(async () => {
+      if (wordIds && wordIds.length > 0) {
+        return prisma.word.findMany({
+          where: { id: { in: wordIds } },
+          include: { language: true },
+          orderBy: { word: 'asc' }
+        })
+      } else {
+        return prisma.word.findMany({
+          include: { language: true },
+          orderBy: { word: 'asc' }
+        })
+      }
+    })
 
     if (!words.length) {
       return NextResponse.json({ 
@@ -109,13 +112,15 @@ Respond with just the category name or an empty string if no good match.`
                     c.name.toLowerCase() === result.category.toLowerCase()
                   )
                   
-                  await prisma.word.update({
-                    where: { id: word.id },
-                    data: {
-                      languageId: detectedLanguage?.id || null,
-                      englishTranslation: result.englishTranslation,
-                      category: detectedCategory?.name || null
-                    }
+                  await withConnection(async () => {
+                    return prisma.word.update({
+                      where: { id: word.id },
+                      data: {
+                        languageId: detectedLanguage?.id || null,
+                        englishTranslation: result.englishTranslation,
+                        category: detectedCategory?.name || null
+                      }
+                    })
                   })
                   
                   return result
@@ -172,13 +177,15 @@ Respond with just the category name or an empty string if no good match.`
                   c.name.toLowerCase() === result.category.toLowerCase()
                 )
                 
-                await prisma.word.update({
-                  where: { id: word.id },
-                  data: {
-                    languageId: detectedLanguage?.id || null,
-                    englishTranslation: result.englishTranslation,
-                    category: detectedCategory?.name || null
-                  }
+                await withConnection(async () => {
+                  return prisma.word.update({
+                    where: { id: word.id },
+                    data: {
+                      languageId: detectedLanguage?.id || null,
+                      englishTranslation: result.englishTranslation,
+                      category: detectedCategory?.name || null
+                    }
+                  })
                 })
                 
                 // Send result
@@ -228,11 +235,7 @@ Respond with just the category name or an empty string if no good match.`
           })
         } finally {
           // Ensure database connection is cleaned up
-          try {
-            await prisma.$disconnect()
-          } catch (disconnectError) {
-            console.error('Error disconnecting from database:', disconnectError)
-          }
+          await safeDisconnect()
           controller.close()
         }
       }

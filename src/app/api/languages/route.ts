@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { prisma, withConnection } from '@/lib/db';
 
 export async function GET() {
   try {
-    const languages = await prisma.language.findMany({
-      orderBy: [
-        { priority: 'asc' },
-        { name: 'asc' }
-      ],
+    const languages = await withConnection(async () => {
+      return prisma.language.findMany({
+        orderBy: [
+          { priority: 'asc' },
+          { name: 'asc' }
+        ],
+      });
     });
     
     return NextResponse.json(languages);
@@ -32,12 +34,14 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const language = await prisma.language.create({
-      data: {
-        name: name.trim(),
-        code: code?.trim() || null,
-        priority: priority || 999,
-      },
+    const language = await withConnection(async () => {
+      return prisma.language.create({
+        data: {
+          name: name.trim(),
+          code: code?.trim() || null,
+          priority: priority || 999,
+        },
+      });
     });
     
     return NextResponse.json(language);
