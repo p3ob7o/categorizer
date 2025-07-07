@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Save, RotateCcw } from 'lucide-react'
+import { X } from 'lucide-react'
 
 interface PromptModalProps {
   isOpen: boolean
@@ -13,15 +13,15 @@ interface PromptModalProps {
   defaultCatPrompt: string
 }
 
-export const PromptModal = ({
+export function PromptModal({
   isOpen,
   onClose,
   onSave,
   currentLangPrompt,
   currentCatPrompt,
   defaultLangPrompt,
-  defaultCatPrompt
-}: PromptModalProps) => {
+  defaultCatPrompt,
+}: PromptModalProps) {
   const [langPrompt, setLangPrompt] = useState(currentLangPrompt)
   const [catPrompt, setCatPrompt] = useState(currentCatPrompt)
 
@@ -31,6 +31,8 @@ export const PromptModal = ({
       setCatPrompt(currentCatPrompt)
     }
   }, [isOpen, currentLangPrompt, currentCatPrompt])
+
+  if (!isOpen) return null
 
   const handleSave = () => {
     onSave(langPrompt, catPrompt)
@@ -42,100 +44,77 @@ export const PromptModal = ({
     setCatPrompt(defaultCatPrompt)
   }
 
-  const handleCancel = () => {
-    setLangPrompt(currentLangPrompt)
-    setCatPrompt(currentCatPrompt)
-    onClose()
-  }
-
-  const handleKeyDown = (event: React.KeyboardEvent) => {
-    if (event.key === 'Escape') {
-      handleCancel()
-    }
-  }
-
-  if (!isOpen) return null
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div 
-        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
-        onKeyDown={handleKeyDown}
-      >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in">
+      <div className="w-full max-w-2xl mx-4 bg-white dark:bg-zinc-900 rounded-lg shadow-lg border border-zinc-200 dark:border-zinc-800">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Edit Prompts
-          </h2>
+        <div className="flex items-center justify-between p-6 border-b border-zinc-200 dark:border-zinc-800">
+          <h2 className="text-lg font-semibold">AI Prompts</h2>
           <button
-            onClick={handleCancel}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-            aria-label="Close modal"
+            onClick={onClose}
+            className="h-8 w-8 rounded-md flex items-center justify-center text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
           >
-            <X className="h-6 w-6" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
-          <div className="space-y-6">
-            {/* Language/Translation Prompt */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Language Detection & Translation Prompt
-              </label>
-              <textarea
-                value={langPrompt}
-                onChange={(e) => setLangPrompt(e.target.value)}
-                className="w-full h-48 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 text-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900 font-mono resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter your language detection prompt..."
-              />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Use {'{languages}'} to insert the list of languages
-              </p>
-            </div>
+        <div className="p-6 space-y-6">
+          {/* Language Detection Prompt */}
+          <div>
+            <label className="text-sm font-medium mb-2 block">
+              Language Detection Prompt
+            </label>
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 mb-3">
+              This prompt determines how the AI detects languages and translates words.
+            </p>
+            <textarea
+              value={langPrompt}
+              onChange={(e) => setLangPrompt(e.target.value)}
+              rows={6}
+              className="w-full p-3 text-sm bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-md focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-300 resize-none"
+              placeholder="Enter language detection prompt..."
+            />
+          </div>
 
-            {/* Categorization Prompt */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Categorization Prompt
-              </label>
-              <textarea
-                value={catPrompt}
-                onChange={(e) => setCatPrompt(e.target.value)}
-                className="w-full h-32 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 text-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900 font-mono resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter your categorization prompt..."
-              />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Use {'{categories}'} to insert the list of categories
-              </p>
-            </div>
+          {/* Categorization Prompt */}
+          <div>
+            <label className="text-sm font-medium mb-2 block">
+              Categorization Prompt
+            </label>
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 mb-3">
+              This prompt determines how the AI categorizes words into your defined categories.
+            </p>
+            <textarea
+              value={catPrompt}
+              onChange={(e) => setCatPrompt(e.target.value)}
+              rows={6}
+              className="w-full p-3 text-sm bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-md focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-300 resize-none"
+              placeholder="Enter categorization prompt..."
+            />
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+        <div className="flex items-center justify-between p-6 border-t border-zinc-200 dark:border-zinc-800">
           <button
             onClick={handleReset}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            className="btn btn-ghost"
           >
-            <RotateCcw className="h-4 w-4 mr-2" />
             Reset to Defaults
           </button>
-          
-          <div className="flex space-x-3">
+          <div className="flex gap-2">
             <button
-              onClick={handleCancel}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              onClick={onClose}
+              className="btn btn-secondary"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              className="btn btn-primary"
             >
-              <Save className="h-4 w-4 mr-2" />
-              Save Changes
+              Save Prompts
             </button>
           </div>
         </div>

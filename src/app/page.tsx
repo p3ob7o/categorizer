@@ -1,21 +1,25 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import FileUpload from '@/components/FileUpload'
-import ProgressBar from '@/components/ProgressBar'
 import ResultsFeed from '@/components/ResultsFeed'
 import { PromptModal } from '@/components/PromptModal'
-import { ProcessingStatus, UploadedFiles } from '@/types'
-import { Play, Download, RefreshCw, CheckCircle, AlertCircle, Settings } from 'lucide-react'
+import { ProcessingResult } from '@/types'
+import { Play, Download, Settings, Database, Zap, Layers, ArrowRight } from 'lucide-react'
+import Link from 'next/link'
 
 const DEFAULT_MODEL = 'gpt-4o-mini'
 const DEFAULT_LANG_PROMPT = `You are a language detection and translation expert. Given a word and a list of languages, determine:\n1. The primary language of the word (if it exists in English, that's always primary)\n2. If the word is not in English, provide an English translation\n3. If the word exists in multiple languages from the list, choose the first one in the order provided\n\nLanguages to consider: English, {languages}\n\nRespond with JSON format:\n{\n  "language": "detected_language",\n  "englishTranslation": "english_translation_or_same_word_if_already_english"\n}`
 const DEFAULT_CAT_PROMPT = `You are a categorization expert. Given a word and a list of categories, determine which category the word best fits into. Be fuzzy in your matching - if the word kind of belongs to a category, that's fine. If it doesn't fit any category well, return an empty string.\n\nAvailable categories: {categories}\n\nRespond with just the category name or an empty string if no good match.`
 
+type ProcessingMode = 'batch' | 'parallel'
+
 export default function Home() {
-  const [filesStatus, setFilesStatus] = useState<UploadedFiles | null>(null)
-  const [progress, setProgress] = useState<ProcessingStatus | null>(null)
+  const [databaseStatus, setDatabaseStatus] = useState<{ categories: number; words: number; languages: number } | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [processingMode, setProcessingMode] = useState<ProcessingMode>('batch')
+  const [processedCount, setProcessedCount] = useState(0)
+  const [totalWords, setTotalWords] = useState(0)
+  const [results, setResults] = useState<ProcessingResult[]>([])
   const [error, setError] = useState<string | null>(null)
   const [langPrompt, setLangPrompt] = useState(DEFAULT_LANG_PROMPT)
   const [catPrompt, setCatPrompt] = useState(DEFAULT_CAT_PROMPT)
@@ -23,54 +27,33 @@ export default function Home() {
 
   // Load initial status
   useEffect(() => {
-    loadStatus()
+    loadDatabaseStatus()
   }, [])
 
-  // Poll for status updates when processing
-  useEffect(() => {
-    let interval: NodeJS.Timeout
-    if (isProcessing) {
-      interval = setInterval(loadStatus, 500) // Poll every 500ms for real-time updates
-    }
-    return () => clearInterval(interval)
-  }, [isProcessing])
-
-  const loadStatus = async () => {
+  const loadDatabaseStatus = async () => {
     try {
-      const response = await fetch('/api/status')
-      const data = await response.json()
+      const [categoriesRes, wordsRes, languagesRes] = await Promise.all([
+        fetch('/api/categories'),
+        fetch('/api/words'),
+        fetch('/api/languages')
+      ])
       
-      if (data.filesStatus) {
-        setFilesStatus(data.filesStatus)
-      }
+      const categories = await categoriesRes.json()
+      const words = await wordsRes.json()
+      const languages = await languagesRes.json()
       
-      if (data.progress) {
-        setProgress(data.progress)
-        setIsProcessing(data.progress.isProcessing)
-      }
-    } catch (error) {
-      console.error('Failed to load status:', error)
-    }
-  }
-
-  const handleFileUpload = async (fileType: string, content: string) => {
-    try {
-      setError(null)
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileType, content })
+      setDatabaseStatus({
+        categories: Array.isArray(categories) ? categories.length : 0,
+        words: Array.isArray(words) ? words.length : 0,
+        languages: Array.isArray(languages) ? languages.length : 0
       })
-
-      const data = await response.json()
       
-      if (data.success) {
-        setFilesStatus(data.status)
-      } else {
-        setError(data.error || 'Upload failed')
+      // Set total words for processing
+      if (Array.isArray(words)) {
+        setTotalWords(words.length)
       }
     } catch (error) {
-      setError('Upload failed')
+      console.error('Failed to load database status:', error)
     }
   }
 
@@ -78,12 +61,15 @@ export default function Home() {
     try {
       setError(null)
       setIsProcessing(true)
+      setProcessedCount(0)
+      setResults([])
       
       const response = await fetch('/api/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'start',
+          mode: processingMode,
           model: DEFAULT_MODEL,
           langPrompt,
           catPrompt
@@ -92,12 +78,17 @@ export default function Home() {
 
       const data = await response.json()
       
-      if (!data.success) {
-        setError(data.error || 'Failed to start processing')
-        setIsProcessing(false)
+      if (response.ok && data.success) {
+        setProcessedCount(data.processed || 0)
+        setResults(data.results || [])
+        // Refresh database status to show updated words
+        await loadDatabaseStatus()
+      } else {
+        setError(data.error || 'Failed to process words')
       }
     } catch (error) {
-      setError('Failed to start processing')
+      setError('Failed to process words')
+    } finally {
       setIsProcessing(false)
     }
   }
@@ -129,181 +120,201 @@ export default function Home() {
     }
   }
 
-  const handleReset = async () => {
-    try {
-      setError(null)
-      const response = await fetch('/api/process', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'reset' })
-      })
-      
-      const data = await response.json()
-      
-      if (data.success) {
-        setProgress(null)
-        setIsProcessing(false)
-        setFilesStatus(null)
-        await loadStatus()
-      } else {
-        setError(data.error || 'Reset failed')
-      }
-    } catch (error) {
-      setError('Reset failed')
-    }
-  }
-
   const handleSavePrompts = (newLangPrompt: string, newCatPrompt: string) => {
     setLangPrompt(newLangPrompt)
     setCatPrompt(newCatPrompt)
   }
 
-  const canStartProcessing = filesStatus?.categories.length && filesStatus?.words.length
+  const canStartProcessing = databaseStatus && databaseStatus.categories > 0 && databaseStatus.words > 0 && !isProcessing
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
-      <div className="max-w-4xl mx-auto px-4">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+    <div className="min-h-screen">
+      <div className="container mx-auto px-4 py-8">
+        {/* Hero Section */}
+        <div className="max-w-3xl mx-auto text-center mb-12">
+          <h1 className="text-4xl font-bold tracking-tight mb-4">
             Domain Categorizer
           </h1>
-          <p className="text-gray-600 dark:text-gray-300">
-            AI-powered domain name categorization tool
+          <p className="text-zinc-600 dark:text-zinc-400 text-sm">
+            AI-powered categorization for domain names and word lists
           </p>
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-            <div className="flex items-center">
-              <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
-              <span className="text-red-800">{error}</span>
+          <div className="max-w-3xl mx-auto mb-6">
+            <div className="rounded-md bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900/50 p-3">
+              <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
             </div>
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <div className="lg:col-span-1">
-            <FileUpload
-              label="Categories"
-              placeholder="Upload categories file (one per line)"
-              onFileUpload={(content) => handleFileUpload('categories', content)}
-              className="min-h-[180px] flex flex-col justify-between"
-            />
-            {filesStatus?.categories.length && (
-              <div className="mt-2 text-sm text-green-600 dark:text-green-400 flex items-center">
-                <CheckCircle className="h-4 w-4 mr-1" />
-                {filesStatus.categories.length} categories loaded
+        {/* Database Status */}
+        <div className="max-w-3xl mx-auto mb-8">
+          <div className="card p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-sm font-semibold mb-1">Database Overview</h2>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                  Current data in your categorization system
+                </p>
               </div>
-            )}
-          </div>
-
-          <div className="lg:col-span-1">
-            <FileUpload
-              label="Languages (Optional)"
-              placeholder="Upload languages file (one per line)"
-              onFileUpload={(content) => handleFileUpload('languages', content)}
-              className="min-h-[180px] flex flex-col justify-between"
-            />
-            {filesStatus?.languages.length && (
-              <div className="mt-2 text-sm text-green-600 dark:text-green-400 flex items-center">
-                <CheckCircle className="h-4 w-4 mr-1" />
-                {filesStatus.languages.length} languages loaded
+              <Link
+                href="/db-management"
+                className="btn btn-secondary group"
+              >
+                <Database className="h-3 w-3 mr-1.5" />
+                Manage
+                <ArrowRight className="h-3 w-3 ml-1 transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            </div>
+            
+            <div className="grid grid-cols-3 gap-4">
+              <div className="text-center p-4 rounded-md bg-zinc-50 dark:bg-zinc-900/50">
+                <p className="text-2xl font-semibold">{databaseStatus?.categories || 0}</p>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">Categories</p>
               </div>
-            )}
-          </div>
-
-          <div className="lg:col-span-1">
-            <FileUpload
-              label="Words"
-              placeholder="Upload words file (one per line)"
-              onFileUpload={(content) => handleFileUpload('words', content)}
-              className="min-h-[180px] flex flex-col justify-between"
-            />
-            {filesStatus?.words.length && (
-              <div className="mt-2 text-sm text-green-600 dark:text-green-400 flex items-center">
-                <CheckCircle className="h-4 w-4 mr-1" />
-                {filesStatus.words.length} words loaded
+              <div className="text-center p-4 rounded-md bg-zinc-50 dark:bg-zinc-900/50">
+                <p className="text-2xl font-semibold">{databaseStatus?.languages || 0}</p>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">Languages</p>
+              </div>
+              <div className="text-center p-4 rounded-md bg-zinc-50 dark:bg-zinc-900/50">
+                <p className="text-2xl font-semibold">{databaseStatus?.words || 0}</p>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">Words</p>
+              </div>
+            </div>
+            
+            {(!databaseStatus?.categories || !databaseStatus?.words) && (
+              <div className="mt-4 p-3 rounded-md bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/50">
+                <p className="text-xs text-amber-800 dark:text-amber-200">
+                  Add at least one category and one word to start processing
+                </p>
               </div>
             )}
           </div>
         </div>
 
-        {canStartProcessing && (
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                Processing
-              </h2>
-              <div className="flex space-x-2">
-                {!isProcessing && progress?.results.length && (
-                  <button
-                    onClick={handleExportResults}
-                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    Export CSV
-                  </button>
-                )}
-                {!isProcessing && (
-                  <button
-                    onClick={handleReset}
-                    className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-gray-800"
-                  >
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Reset
-                  </button>
-                )}
-                {!isProcessing && (
+        {/* Processing Section */}
+        {databaseStatus && databaseStatus.categories > 0 && databaseStatus.words > 0 && (
+          <div className="max-w-3xl mx-auto mb-8">
+            <div className="card p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-sm font-semibold mb-1">Processing Options</h2>
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                    Choose how to process your word list
+                  </p>
+                </div>
+                <div className="flex items-center space-x-2">
                   <button
                     onClick={() => setIsPromptModalOpen(true)}
-                    className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    aria-label="Edit prompts"
+                    className="btn btn-ghost"
                   >
-                    <Settings className="h-4 w-4 mr-2" />
-                    Edit Prompts
+                    <Settings className="h-3 w-3 mr-1.5" />
+                    Prompts
                   </button>
-                )}
-                {!isProcessing && (
                   <button
-                    onClick={handleStartProcessing}
-                    disabled={!canStartProcessing}
-                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={handleExportResults}
+                    className="btn btn-secondary"
                   >
-                    <Play className="h-4 w-4 mr-2" />
-                    Start Processing
+                    <Download className="h-3 w-3 mr-1.5" />
+                    Export
                   </button>
-                )}
-              </div>
-            </div>
-
-            {progress && (
-              <div className="space-y-4">
-                <ProgressBar status={progress} />
-                <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
-                  <span>
-                    Processed: {progress.processedWords} / {progress.totalWords}
-                  </span>
-                  <span>
-                    {Math.round((progress.processedWords / progress.totalWords) * 100)}%
-                  </span>
                 </div>
-                {progress.currentWord && (
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    Currently processing: <span className="font-medium">{progress.currentWord}</span>
-                  </div>
-                )}
-                {progress.error && (
-                  <div className="text-sm text-red-600 dark:text-red-400">
-                    Error: {progress.error}
-                  </div>
-                )}
               </div>
-            )}
+
+              {/* Processing Mode Selection */}
+              <div className="grid grid-cols-2 gap-3 mb-6">
+                <button
+                  onClick={() => setProcessingMode('batch')}
+                  className={`relative p-4 rounded-md border transition-all ${
+                    processingMode === 'batch'
+                      ? 'border-zinc-900 dark:border-white bg-zinc-50 dark:bg-zinc-900'
+                      : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'
+                  }`}
+                >
+                  <Layers className="h-5 w-5 mb-2 text-zinc-700 dark:text-zinc-300" />
+                  <h3 className="text-sm font-medium mb-1">Batch</h3>
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                    Sequential processing
+                  </p>
+                  {processingMode === 'batch' && (
+                    <div className="absolute top-2 right-2 h-2 w-2 rounded-full bg-zinc-900 dark:bg-white" />
+                  )}
+                </button>
+                <button
+                  onClick={() => setProcessingMode('parallel')}
+                  className={`relative p-4 rounded-md border transition-all ${
+                    processingMode === 'parallel'
+                      ? 'border-zinc-900 dark:border-white bg-zinc-50 dark:bg-zinc-900'
+                      : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'
+                  }`}
+                >
+                  <Zap className="h-5 w-5 mb-2 text-zinc-700 dark:text-zinc-300" />
+                  <h3 className="text-sm font-medium mb-1">Parallel</h3>
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                    Faster batch processing
+                  </p>
+                  {processingMode === 'parallel' && (
+                    <div className="absolute top-2 right-2 h-2 w-2 rounded-full bg-zinc-900 dark:bg-white" />
+                  )}
+                </button>
+              </div>
+
+              {/* Start Processing Button */}
+              <button
+                onClick={handleStartProcessing}
+                disabled={!canStartProcessing}
+                className="btn btn-primary w-full"
+              >
+                {isProcessing ? (
+                  <>
+                    <div className="h-3 w-3 border-2 border-zinc-300 border-t-transparent rounded-full animate-spin mr-2" />
+                    Processing {processedCount} of {totalWords}
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-3 w-3 mr-1.5" />
+                    Start Processing
+                  </>
+                )}
+              </button>
+
+              {/* Progress Display */}
+              {isProcessing && (
+                <div className="mt-4">
+                  <div className="flex justify-between text-xs text-zinc-600 dark:text-zinc-400 mb-2">
+                    <span>{processingMode === 'parallel' ? 'Parallel' : 'Batch'} processing</span>
+                    <span>{Math.round((processedCount / totalWords) * 100)}%</span>
+                  </div>
+                  <div className="h-1 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-zinc-900 dark:bg-white transition-all duration-300"
+                      style={{ width: `${(processedCount / totalWords) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Results Summary */}
+              {!isProcessing && processedCount > 0 && (
+                <div className="mt-4 p-3 rounded-md bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-900/50">
+                  <p className="text-xs text-emerald-800 dark:text-emerald-200">
+                    Successfully processed {processedCount} words
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {progress && filesStatus?.words && (
-          <ResultsFeed status={progress} words={filesStatus.words} />
+        {/* Results Feed */}
+        {results.length > 0 && (
+          <div className="max-w-3xl mx-auto">
+            <div className="card p-6">
+              <h2 className="text-sm font-semibold mb-4">Processing Results</h2>
+              <ResultsFeed results={results} />
+            </div>
+          </div>
         )}
 
         {/* Prompt Modal */}

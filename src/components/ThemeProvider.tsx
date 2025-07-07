@@ -20,7 +20,7 @@ export const useTheme = () => {
 }
 
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
-  const [theme, setTheme] = useState<Theme>('light')
+  const [theme, setTheme] = useState<Theme>('dark') // Default to dark
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -46,11 +46,7 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light')
   }
 
-  // Prevent hydration mismatch by not rendering until mounted
-  if (!mounted) {
-    return <>{children}</>
-  }
-
+  // Always provide the context, even when not mounted
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>
       {children}
