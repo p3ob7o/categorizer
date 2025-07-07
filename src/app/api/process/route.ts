@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
       // Get data from database
       const [categories, languages] = await Promise.all([
         prisma.category.findMany({ orderBy: { name: 'asc' } }),
-        prisma.language.findMany({ orderBy: { name: 'asc' } })
+        prisma.language.findMany({ orderBy: [{ priority: 'asc' }, { name: 'asc' }] })
       ])
 
       if (!categories.length) {

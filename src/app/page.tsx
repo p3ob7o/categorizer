@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import ResultsFeed from '@/components/ResultsFeed'
+import RealTimeResultsFeed from '@/components/RealTimeResultsFeed'
 import { PromptModal } from '@/components/PromptModal'
 import { ProcessingResult } from '@/types'
 import { Play, Download, Settings, Database, Zap, Layers, ArrowRight } from 'lucide-react'
@@ -9,7 +9,7 @@ import Link from 'next/link'
 import WizardLogo from '@/components/WizardLogo'
 
 const DEFAULT_MODEL = 'gpt-4o-mini'
-const DEFAULT_LANG_PROMPT = `You are a language detection and translation expert. Given a word and a list of languages, determine:\n1. The primary language of the word (if it exists in English, that's always primary)\n2. If the word is not in English, provide an English translation\n3. If the word exists in multiple languages from the list, choose the first one in the order provided\n\nLanguages to consider: English, {languages}\n\nRespond with JSON format:\n{\n  "language": "detected_language",\n  "englishTranslation": "english_translation_or_same_word_if_already_english"\n}`
+const DEFAULT_LANG_PROMPT = `You are a language detection and translation expert. Given a word and a list of languages, determine:\n1. The primary language of the word using the priority order provided (languages are listed in priority order)\n2. If the word is not in English, provide an English translation\n3. If the word exists in multiple languages from the list, choose the one with the highest priority (first in the list)\n\nLanguages to consider (in priority order): {languages}\n\nRespond with JSON format:\n{\n  "language": "detected_language",\n  "englishTranslation": "english_translation_or_same_word_if_already_english"\n}`
 const DEFAULT_CAT_PROMPT = `You are a categorization expert. Given a word and a list of categories, determine which category the word best fits into. Be fuzzy in your matching - if the word kind of belongs to a category, that's fine. If it doesn't fit any category well, return an empty string.\n\nAvailable categories: {categories}\n\nRespond with just the category name or an empty string if no good match.`
 
 type ProcessingMode = 'batch' | 'parallel'
@@ -65,11 +65,10 @@ export default function Home() {
       setProcessedCount(0)
       setResults([])
       
-      const response = await fetch('/api/process', {
+      const response = await fetch('/api/process-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'start',
           mode: processingMode,
           model: DEFAULT_MODEL,
           langPrompt,
@@ -77,19 +76,62 @@ export default function Home() {
         })
       })
 
-      const data = await response.json()
+      if (!response.ok) {
+        const errorData = await response.json()
+        setError(errorData.error || 'Failed to start processing')
+        setIsProcessing(false)
+        return
+      }
+
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
       
-      if (response.ok && data.success) {
-        setProcessedCount(data.processed || 0)
-        setResults(data.results || [])
-        // Refresh database status to show updated words
-        await loadDatabaseStatus()
-      } else {
-        setError(data.error || 'Failed to process words')
+      if (!reader) {
+        setError('Failed to create stream reader')
+        setIsProcessing(false)
+        return
+      }
+
+      // Process the stream
+      while (true) {
+        const { done, value } = await reader.read()
+        
+        if (done) {
+          break
+        }
+
+        const chunk = decoder.decode(value)
+        const lines = chunk.split('\n')
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              
+              if (data.type === 'result') {
+                setResults(prev => [...prev, data.result])
+                setProcessedCount(data.processedWords)
+              } else if (data.type === 'status') {
+                setProcessedCount(data.processedWords)
+                setTotalWords(data.totalWords)
+              } else if (data.type === 'complete') {
+                setIsProcessing(false)
+                setProcessedCount(data.processedWords)
+                // Refresh database status to show updated words
+                await loadDatabaseStatus()
+              } else if (data.type === 'error') {
+                setError(data.error)
+                setIsProcessing(false)
+              }
+            } catch (parseError) {
+              console.error('Error parsing stream data:', parseError)
+            }
+          }
+        }
       }
     } catch (error) {
+      console.error('Streaming error:', error)
       setError('Failed to process words')
-    } finally {
       setIsProcessing(false)
     }
   }
@@ -287,15 +329,23 @@ export default function Home() {
               {isProcessing && (
                 <div className="mt-4">
                   <div className="flex justify-between text-xs text-zinc-600 dark:text-zinc-400 mb-2">
-                    <span>{processingMode === 'parallel' ? 'Parallel' : 'Batch'} processing</span>
+                    <span>
+                      {processingMode === 'parallel' ? 'Parallel' : 'Sequential'} processing
+                      {processedCount > 0 && ` • ${processedCount}/${totalWords} words`}
+                    </span>
                     <span>{Math.round((processedCount / totalWords) * 100)}%</span>
                   </div>
-                  <div className="h-1 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
+                  <div className="h-2 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-zinc-900 dark:bg-white transition-all duration-300"
+                      className="h-full bg-gradient-to-r from-blue-500 to-purple-600 transition-all duration-500 ease-out"
                       style={{ width: `${(processedCount / totalWords) * 100}%` }}
                     />
                   </div>
+                  {processedCount > 0 && (
+                    <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                      Processing in real-time • Results appear below as they complete
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -311,13 +361,15 @@ export default function Home() {
           </div>
         )}
 
-        {/* Results Feed */}
-        {results.length > 0 && (
+        {/* Real-time Results Feed */}
+        {(results.length > 0 || isProcessing) && (
           <div className="max-w-3xl mx-auto">
-            <div className="card p-6">
-              <h2 className="text-sm font-semibold mb-4">Processing Results</h2>
-              <ResultsFeed results={results} />
-            </div>
+            <RealTimeResultsFeed 
+              results={results}
+              isProcessing={isProcessing}
+              processedCount={processedCount}
+              totalWords={totalWords}
+            />
           </div>
         )}
 

@@ -37,6 +37,7 @@ model Language {
   id          Int         @id @default(autoincrement())
   name        String      @unique
   code        String?     @unique // Optional language code like 'en', 'es', etc.
+  priority    Int         @default(999) // Lower numbers = higher priority (1 = highest)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   

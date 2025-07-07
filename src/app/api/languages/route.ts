@@ -4,7 +4,10 @@ import { prisma } from '@/lib/db';
 export async function GET() {
   try {
     const languages = await prisma.language.findMany({
-      orderBy: { name: 'asc' },
+      orderBy: [
+        { priority: 'asc' },
+        { name: 'asc' }
+      ],
     });
     
     return NextResponse.json(languages);
@@ -20,7 +23,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, code } = body;
+    const { name, code, priority } = body;
     
     if (!name || typeof name !== 'string') {
       return NextResponse.json(
@@ -33,6 +36,7 @@ export async function POST(request: NextRequest) {
       data: {
         name: name.trim(),
         code: code?.trim() || null,
+        priority: priority || 999,
       },
     });
     

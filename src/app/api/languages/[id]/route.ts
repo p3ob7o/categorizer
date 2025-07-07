@@ -9,7 +9,7 @@ export async function PUT(
     const { id: idString } = await params;
     const id = parseInt(idString);
     const body = await request.json();
-    const { name, code } = body;
+    const { name, code, priority } = body;
     
     if (!name || typeof name !== 'string') {
       return NextResponse.json(
@@ -23,6 +23,7 @@ export async function PUT(
       data: {
         name: name.trim(),
         code: code?.trim() || null,
+        priority: priority !== undefined ? priority : undefined,
       },
     });
     

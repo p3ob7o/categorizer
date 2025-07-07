@@ -7,6 +7,7 @@ interface Language {
   id: number;
   name: string;
   code: string | null;
+  priority: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -16,9 +17,11 @@ export default function LanguagesTab() {
   const [loading, setLoading] = useState(true);
   const [newLanguageName, setNewLanguageName] = useState('');
   const [newLanguageCode, setNewLanguageCode] = useState('');
+  const [newLanguagePriority, setNewLanguagePriority] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingName, setEditingName] = useState('');
   const [editingCode, setEditingCode] = useState('');
+  const [editingPriority, setEditingPriority] = useState('');
   const [uploadResults, setUploadResults] = useState<any>(null);
 
   // Modal states
@@ -58,7 +61,8 @@ export default function LanguagesTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           name: newLanguageName,
-          code: newLanguageCode || null
+          code: newLanguageCode || null,
+          priority: newLanguagePriority ? parseInt(newLanguagePriority) : 999
         }),
       });
 
@@ -66,6 +70,7 @@ export default function LanguagesTab() {
         await fetchLanguages();
         setNewLanguageName('');
         setNewLanguageCode('');
+        setNewLanguagePriority('');
         setShowAddModal(false);
       } else {
         const error = await response.json();
@@ -81,6 +86,7 @@ export default function LanguagesTab() {
     setEditingId(language.id);
     setEditingName(language.name);
     setEditingCode(language.code || '');
+    setEditingPriority(language.priority.toString());
   };
 
   const handleUpdate = async () => {
@@ -92,7 +98,8 @@ export default function LanguagesTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           name: editingName,
-          code: editingCode || null
+          code: editingCode || null,
+          priority: editingPriority ? parseInt(editingPriority) : 999
         }),
       });
 
@@ -101,6 +108,7 @@ export default function LanguagesTab() {
         setEditingId(null);
         setEditingName('');
         setEditingCode('');
+        setEditingPriority('');
       } else {
         const error = await response.json();
         alert(error.error || 'Failed to update language');
@@ -210,6 +218,14 @@ export default function LanguagesTab() {
                       placeholder="Code"
                       className="input w-24"
                     />
+                    <input
+                      type="number"
+                      value={editingPriority}
+                      onChange={(e) => setEditingPriority(e.target.value)}
+                      placeholder="Priority"
+                      className="input w-24"
+                      min="1"
+                    />
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -223,6 +239,7 @@ export default function LanguagesTab() {
                         setEditingId(null);
                         setEditingName('');
                         setEditingCode('');
+                        setEditingPriority('');
                       }}
                       className="btn btn-secondary"
                     >
@@ -239,6 +256,9 @@ export default function LanguagesTab() {
                       {language.code && (
                         <span className="ml-2 text-xs text-zinc-500 dark:text-zinc-400">({language.code})</span>
                       )}
+                      <span className="ml-2 text-xs text-zinc-500 dark:text-zinc-400">
+                        Priority: {language.priority}
+                      </span>
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
@@ -299,6 +319,15 @@ export default function LanguagesTab() {
                 onChange={(e) => setNewLanguageCode(e.target.value)}
                 placeholder="Language code (optional)"
                 className="input w-full"
+              />
+              
+              <input
+                type="number"
+                value={newLanguagePriority}
+                onChange={(e) => setNewLanguagePriority(e.target.value)}
+                placeholder="Priority (1 = highest, default: 999)"
+                className="input w-full"
+                min="1"
               />
               
               <div className="flex gap-3 pt-2">

@@ -14,6 +14,15 @@ export interface ProcessedWord {
   category: string
 }
 
+export interface Language {
+  id: number
+  name: string
+  code: string | null
+  priority: number
+  createdAt: string
+  updatedAt: string
+}
+
 export interface UploadedFiles {
   categories: string[]
   languages: string[]
