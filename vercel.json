@@ -7,9 +7,6 @@
   "functions": {
     "src/app/api/process/route.ts": {
       "maxDuration": 60
-    },
-    "src/app/api/upload/route.ts": {
-      "maxDuration": 30
     }
   }
 } 

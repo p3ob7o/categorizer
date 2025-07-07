@@ -4,10 +4,11 @@ import { processWord } from '@/lib/openai';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const id = parseInt(params.id);
+    const { id: idString } = await params;
+    const id = parseInt(idString);
     const body = await request.json();
     const { langPrompt, catPrompt } = body;
     
