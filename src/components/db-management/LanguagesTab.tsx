@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Globe } from 'lucide-react';
+import { Plus, Edit2, Trash2, Globe, Upload, X } from 'lucide-react';
 
 interface Language {
   id: number;
@@ -20,6 +20,10 @@ export default function LanguagesTab() {
   const [editingName, setEditingName] = useState('');
   const [editingCode, setEditingCode] = useState('');
   const [uploadResults, setUploadResults] = useState<any>(null);
+
+  // Modal states
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
 
   useEffect(() => {
     fetchLanguages();
@@ -62,6 +66,7 @@ export default function LanguagesTab() {
         await fetchLanguages();
         setNewLanguageName('');
         setNewLanguageCode('');
+        setShowAddModal(false);
       } else {
         const error = await response.json();
         alert(error.error || 'Failed to add language');
@@ -159,70 +164,22 @@ export default function LanguagesTab() {
 
   return (
     <div className="space-y-6">
-      {/* Add new language form */}
-      <div className="card p-6">
-        <h3 className="text-sm font-semibold mb-4">Add New Language</h3>
-        <form onSubmit={handleAddLanguage} className="space-y-3">
-          <div className="flex gap-3">
-            <input
-              type="text"
-              value={newLanguageName}
-              onChange={(e) => setNewLanguageName(e.target.value)}
-              placeholder="Language name"
-              className="input flex-1"
-            />
-            <input
-              type="text"
-              value={newLanguageCode}
-              onChange={(e) => setNewLanguageCode(e.target.value)}
-              placeholder="Code (optional)"
-              className="input w-32"
-            />
-          </div>
-          <button type="submit" className="btn btn-primary">
-            <Plus className="h-3 w-3 mr-1.5" />
-            Add Language
-          </button>
-        </form>
-      </div>
-
-      {/* CSV Upload */}
-      <div className="card p-6">
-        <h3 className="text-sm font-semibold mb-4">Bulk Upload</h3>
-        <p className="text-xs text-zinc-600 dark:text-zinc-400 mb-3">
-          Upload a CSV file with format: language_name,language_code (code is optional)
-        </p>
-        <label className="block">
-          <input
-            type="file"
-            accept=".csv"
-            onChange={handleFileUpload}
-            className="block w-full text-sm text-zinc-600 dark:text-zinc-400
-              file:mr-3 file:py-1.5 file:px-3
-              file:rounded-md file:border-0
-              file:text-xs file:font-medium
-              file:bg-zinc-100 file:text-zinc-700
-              hover:file:bg-zinc-200
-              dark:file:bg-zinc-800 dark:file:text-zinc-200
-              dark:hover:file:bg-zinc-700"
-          />
-        </label>
-        {uploadResults && (
-          <div className="mt-4 p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-md text-sm">
-            <p>Created: {uploadResults.results?.created || 0}</p>
-            <p>Skipped: {uploadResults.results?.skipped || 0}</p>
-            {uploadResults.results?.errors?.length > 0 && (
-              <div className="mt-2">
-                <p className="text-red-600 dark:text-red-400 font-medium">Errors:</p>
-                <ul className="text-xs mt-1 space-y-0.5">
-                  {uploadResults.results.errors.map((error: string, idx: number) => (
-                    <li key={idx} className="text-red-600 dark:text-red-400">{error}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
+      {/* Action buttons */}
+      <div className="flex gap-3">
+        <button 
+          onClick={() => setShowAddModal(true)}
+          className="btn btn-primary"
+        >
+          <Plus className="h-3 w-3 mr-1.5" />
+          Add Language
+        </button>
+        <button 
+          onClick={() => setShowUploadModal(true)}
+          className="btn btn-secondary"
+        >
+          <Upload className="h-3 w-3 mr-1.5" />
+          Bulk Upload
+        </button>
       </div>
 
       {/* Languages list */}
@@ -311,6 +268,125 @@ export default function LanguagesTab() {
           )}
         </div>
       </div>
+
+      {/* Add Language Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="card p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold">Add New Language</h3>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="btn btn-ghost p-1"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleAddLanguage} className="space-y-4">
+              <input
+                type="text"
+                value={newLanguageName}
+                onChange={(e) => setNewLanguageName(e.target.value)}
+                placeholder="Language name"
+                className="input w-full"
+                required
+              />
+              
+              <input
+                type="text"
+                value={newLanguageCode}
+                onChange={(e) => setNewLanguageCode(e.target.value)}
+                placeholder="Language code (optional)"
+                className="input w-full"
+              />
+              
+              <div className="flex gap-3 pt-2">
+                <button type="submit" className="btn btn-primary flex-1">
+                  <Plus className="h-3 w-3 mr-1.5" />
+                  Add Language
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="btn btn-secondary"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="card p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold">Bulk Upload</h3>
+              <button
+                onClick={() => {
+                  setShowUploadModal(false);
+                  setUploadResults(null);
+                }}
+                className="btn btn-ghost p-1"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                Upload a CSV file with format: language_name,language_code (code is optional)
+              </p>
+              
+              <label className="block">
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileUpload}
+                  className="block w-full text-sm text-zinc-600 dark:text-zinc-400
+                    file:mr-3 file:py-1.5 file:px-3
+                    file:rounded-md file:border-0
+                    file:text-xs file:font-medium
+                    file:bg-zinc-100 file:text-zinc-700
+                    hover:file:bg-zinc-200
+                    dark:file:bg-zinc-800 dark:file:text-zinc-200
+                    dark:hover:file:bg-zinc-700"
+                />
+              </label>
+              
+              {uploadResults && (
+                <div className="p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-md text-sm">
+                  <p>Created: {uploadResults.results?.created || 0}</p>
+                  <p>Skipped: {uploadResults.results?.skipped || 0}</p>
+                  {uploadResults.results?.errors?.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-red-600 dark:text-red-400 font-medium">Errors:</p>
+                      <ul className="text-xs mt-1 space-y-0.5">
+                        {uploadResults.results.errors.map((error: string, idx: number) => (
+                          <li key={idx} className="text-red-600 dark:text-red-400">{error}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              <button 
+                onClick={() => {
+                  setShowUploadModal(false);
+                  setUploadResults(null);
+                }}
+                className="btn btn-secondary w-full"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 

@@ -48,10 +48,32 @@ export async function POST(
       catPrompt || `You are a categorization expert. Given a word and a list of categories, determine which category the word best fits into. Be fuzzy in your matching - if the word kind of belongs to a category, that's fine. If it doesn't fit any category well, return an empty string.\n\nAvailable categories: {categories}\n\nRespond with just the category name or an empty string if no good match.`
     );
     
-    // Validate that the language is in our list
-    const detectedLanguage = languages.find(l => 
-      l.name.toLowerCase() === result.language.toLowerCase()
-    );
+    // Validate that the language is in our list with flexible matching
+    const detectedLanguage = languages.find(l => {
+      const langName = l.name.toLowerCase();
+      const resultLang = result.language.toLowerCase();
+      const langCode = l.code?.toLowerCase();
+      
+      // Direct name match
+      if (langName === resultLang) return true;
+      
+      // Check if it's English with various forms
+      if (resultLang === 'english' && (langName === 'english' || langCode === 'en')) return true;
+      
+      // Check if language code matches
+      if (langCode && langCode === resultLang) return true;
+      
+      // Handle common language variations
+      if (resultLang === 'en' && (langName === 'english' || langCode === 'en')) return true;
+      
+      return false;
+    });
+    
+    console.log('🔍 Language matching:', {
+      aiDetected: result.language,
+      foundMatch: detectedLanguage?.name,
+      availableLanguages: languages.map(l => `${l.name}${l.code ? ` (${l.code})` : ''}`)
+    });
     
     // Validate that the category is in our list
     const detectedCategory = categories.find(c => 

@@ -4,13 +4,18 @@ import { prisma } from '@/lib/db';
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const languageId = searchParams.get('languageId');
+    const languageIds = searchParams.getAll('languageId');
     const search = searchParams.get('search');
     
     const where: any = {};
     
-    if (languageId) {
-      where.languageId = parseInt(languageId);
+    if (languageIds.length > 0) {
+      const validLanguageIds = languageIds.map(id => parseInt(id)).filter(id => !isNaN(id));
+      if (validLanguageIds.length > 0) {
+        where.languageId = {
+          in: validLanguageIds
+        };
+      }
     }
     
     if (search) {

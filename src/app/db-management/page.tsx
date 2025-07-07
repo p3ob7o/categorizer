@@ -37,8 +37,12 @@ export default function DatabaseManagement() {
 
         {/* Tabs */}
         <div className="max-w-5xl mx-auto">
-          <Tabs defaultValue="categories" className="w-full">
+          <Tabs defaultValue="words" className="w-full">
             <TabsList className="grid w-full grid-cols-3 mb-8">
+              <TabsTrigger value="words" className="flex items-center gap-2">
+                <FileText className="h-3 w-3" />
+                Words
+              </TabsTrigger>
               <TabsTrigger value="categories" className="flex items-center gap-2">
                 <Tag className="h-3 w-3" />
                 Categories
@@ -47,11 +51,11 @@ export default function DatabaseManagement() {
                 <Globe className="h-3 w-3" />
                 Languages
               </TabsTrigger>
-              <TabsTrigger value="words" className="flex items-center gap-2">
-                <FileText className="h-3 w-3" />
-                Words
-              </TabsTrigger>
             </TabsList>
+            
+            <TabsContent value="words">
+              <WordsTab />
+            </TabsContent>
             
             <TabsContent value="categories">
               <CategoriesTab />
@@ -59,10 +63,6 @@ export default function DatabaseManagement() {
             
             <TabsContent value="languages">
               <LanguagesTab />
-            </TabsContent>
-            
-            <TabsContent value="words">
-              <WordsTab />
             </TabsContent>
           </Tabs>
         </div>
