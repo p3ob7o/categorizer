@@ -306,8 +306,8 @@ export class ProcessingService {
         categoryNames,
         languageNames,
         this.config.model,
-        this.config.languagePrompt,
-        this.config.categoryPrompt
+        this.config.languagePrompt || '',
+        this.config.categoryPrompt || ''
       )
 
       const processingTime = Date.now() - startTime
