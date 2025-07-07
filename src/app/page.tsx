@@ -403,25 +403,25 @@ export default function Home() {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-medium">Words to Process ({selectedWords.length} selected)</h3>
                 </div>
-                <div className="flex flex-wrap gap-2 mb-4">
+                <div className="grid grid-cols-3 gap-4 mb-4">
                   <button
                     onClick={() => {
                       const unprocessed = allWords.filter(w => !w.languageId || !w.category)
                       setSelectedWords(unprocessed.map(w => w.id))
                     }}
-                    className="btn btn-outline btn-sm"
+                    className="btn btn-outline"
                   >
                     Select Unprocessed ({allWords.filter(w => !w.languageId || !w.category).length})
                   </button>
                   <button
                     onClick={() => setSelectedWords(allWords.map(w => w.id))}
-                    className="btn btn-outline btn-sm"
+                    className="btn btn-outline"
                   >
                     Select All ({allWords.length})
                   </button>
                   <button
                     onClick={() => setSelectedWords([])}
-                    className="btn btn-outline btn-sm"
+                    className="btn btn-outline"
                   >
                     Clear Selection
                   </button>
