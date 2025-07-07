@@ -6,7 +6,8 @@ import CategoriesTab from '@/components/db-management/CategoriesTab';
 import LanguagesTab from '@/components/db-management/LanguagesTab';
 import WordsTab from '@/components/db-management/WordsTab';
 import Link from 'next/link';
-import { ArrowLeft, Database, Globe, Tag, FileText } from 'lucide-react';
+import { ArrowLeft, Globe, Tag, FileText } from 'lucide-react';
+import WizardLogo from '@/components/WizardLogo';
 
 export default function DatabaseManagement() {
   return (
@@ -24,7 +25,7 @@ export default function DatabaseManagement() {
           
           <div className="flex items-center gap-3 mb-2">
             <div className="h-10 w-10 rounded-md bg-zinc-900 dark:bg-white flex items-center justify-center">
-              <Database className="h-5 w-5 text-white dark:text-black" />
+              <WizardLogo className="h-5 w-5 text-white dark:text-black" />
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Database Management</h1>

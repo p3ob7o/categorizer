@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/components/ThemeProvider'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import WizardLogo from '@/components/WizardLogo'
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -30,7 +31,7 @@ export default function RootLayout({
                 <div className="flex h-14 items-center justify-between">
                   <div className="flex items-center space-x-4">
                     <a href="/" className="flex items-center space-x-2">
-                      <div className="h-6 w-6 rounded-md bg-zinc-900 dark:bg-white" />
+                      <WizardLogo className="h-6 w-6 text-zinc-900 dark:text-white" />
                       <span className="text-sm font-medium">Domain Categorizer</span>
                     </a>
                   </div>

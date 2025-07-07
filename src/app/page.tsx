@@ -6,6 +6,7 @@ import { PromptModal } from '@/components/PromptModal'
 import { ProcessingResult } from '@/types'
 import { Play, Download, Settings, Database, Zap, Layers, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
+import WizardLogo from '@/components/WizardLogo'
 
 const DEFAULT_MODEL = 'gpt-4o-mini'
 const DEFAULT_LANG_PROMPT = `You are a language detection and translation expert. Given a word and a list of languages, determine:\n1. The primary language of the word (if it exists in English, that's always primary)\n2. If the word is not in English, provide an English translation\n3. If the word exists in multiple languages from the list, choose the first one in the order provided\n\nLanguages to consider: English, {languages}\n\nRespond with JSON format:\n{\n  "language": "detected_language",\n  "englishTranslation": "english_translation_or_same_word_if_already_english"\n}`
@@ -132,6 +133,9 @@ export default function Home() {
       <div className="container mx-auto px-4 py-8">
         {/* Hero Section */}
         <div className="max-w-3xl mx-auto text-center mb-12">
+          <div className="flex items-center justify-center mb-6">
+            <WizardLogo className="h-16 w-16 text-zinc-900 dark:text-white" />
+          </div>
           <h1 className="text-4xl font-bold tracking-tight mb-4">
             Domain Categorizer
           </h1>
