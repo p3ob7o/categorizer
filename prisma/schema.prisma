@@ -14,6 +14,111 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model ProcessingSession {
+  id                String      @id @default(uuid())
+  status            String      @default("pending") // pending, processing, completed, failed, paused
+  totalWords        Int         @default(0)
+  processedWords    Int         @default(0)
+  successfulWords   Int         @default(0)
+  failedWords       Int         @default(0)
+  currentWord       String?
+  currentChunk      Int         @default(0)
+  totalChunks       Int         @default(0)
+  chunkSize         Int         @default(10)
+  mode              String      @default("batch") // batch, parallel
+  model             String      @default("gpt-4o-mini")
+  
+  // Progress tracking
+  startedAt         DateTime?
+  completedAt       DateTime?
+  estimatedEndTime  DateTime?
+  lastProcessedAt   DateTime?
+  
+  // Cost tracking
+  totalTokensUsed   Int         @default(0)
+  estimatedCost     Float       @default(0.0)
+  
+  // Error handling
+  error             String?
+  retryCount        Int         @default(0)
+  maxRetries        Int         @default(3)
+  
+  // Resume capability
+  lastProcessedWordId Int?
+  resumeData        Json?       // Store additional resume data
+  
+  // Configuration
+  languagePrompt    String?
+  categoryPrompt    String?
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  results           ProcessingResult[]
+  analytics         ProcessingAnalytics[]
+  
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ProcessingResult {
+  id                  String      @id @default(uuid())
+  sessionId           String
+  wordId              Int
+  originalWord        String
+  detectedLanguage    String?
+  englishTranslation  String?
+  assignedCategory    String?
+  processingTime      Int         @default(0) // in milliseconds
+  tokensUsed          Int         @default(0)
+  cost                Float       @default(0.0)
+  success             Boolean     @default(true)
+  error               String?
+  retryCount          Int         @default(0)
+  processedAt         DateTime    @default(now())
+  
+  session             ProcessingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  word                Word              @relation(fields: [wordId], references: [id], onDelete: Cascade)
+  
+  @@index([sessionId])
+  @@index([wordId])
+  @@index([success])
+  @@index([processedAt])
+}
+
+model ProcessingAnalytics {
+  id                    String      @id @default(uuid())
+  sessionId             String?
+  date                  DateTime    @default(now())
+  
+  // Performance metrics
+  totalWordsProcessed   Int         @default(0)
+  successfulWords       Int         @default(0)
+  failedWords           Int         @default(0)
+  averageProcessingTime Float       @default(0.0)
+  
+  // Cost metrics
+  totalTokensUsed       Int         @default(0)
+  totalCost             Float       @default(0.0)
+  costPerWord           Float       @default(0.0)
+  
+  // Language breakdown
+  languageBreakdown     Json?       // {"English": 100, "Spanish": 50, ...}
+  categoryBreakdown     Json?       // {"food": 75, "music": 25, ...}
+  
+  // Error analysis
+  errorBreakdown        Json?       // {"timeout": 5, "api_limit": 2, ...}
+  
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  
+  session               ProcessingSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  
+  @@index([date])
+  @@index([sessionId])
+}
+
+// Keep the old models for backward compatibility
 model Session {
   id              String      @id @default(uuid())
   status          String      @default("pending")
@@ -55,6 +160,7 @@ model Word {
   updatedAt           DateTime    @updatedAt
   
   language            Language?   @relation(fields: [languageId], references: [id])
+  processingResults   ProcessingResult[]
   
   @@unique([word, languageId])
   @@index([languageId])

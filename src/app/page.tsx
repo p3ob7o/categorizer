@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import RealTimeResultsFeed from '@/components/RealTimeResultsFeed'
+import EnhancedProcessing from '@/components/EnhancedProcessing'
 import { PromptModal } from '@/components/PromptModal'
 import { ProcessingResult } from '@/types'
-import { Play, Download, Settings, Database, Zap, Layers, ArrowRight } from 'lucide-react'
+import { Play, Download, Settings, Database, Zap, Layers, ArrowRight, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import WizardLogo from '@/components/WizardLogo'
 
@@ -25,6 +26,7 @@ export default function Home() {
   const [langPrompt, setLangPrompt] = useState(DEFAULT_LANG_PROMPT)
   const [catPrompt, setCatPrompt] = useState(DEFAULT_CAT_PROMPT)
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false)
+  const [processingView, setProcessingView] = useState<'simple' | 'enhanced'>('simple')
 
   // Load initial status
   useEffect(() => {
@@ -239,8 +241,45 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Processing Section */}
+        {/* Processing View Toggle */}
         {databaseStatus && databaseStatus.categories > 0 && databaseStatus.words > 0 && (
+          <div className="max-w-3xl mx-auto mb-6">
+            <div className="flex items-center justify-center space-x-1 p-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg">
+              <button
+                onClick={() => setProcessingView('simple')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  processingView === 'simple'
+                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-sm'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                }`}
+              >
+                <Layers className="h-4 w-4 mr-2 inline" />
+                Simple Processing
+              </button>
+              <button
+                onClick={() => setProcessingView('enhanced')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  processingView === 'enhanced'
+                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-sm'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                }`}
+              >
+                <Sparkles className="h-4 w-4 mr-2 inline" />
+                Enhanced Processing
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Enhanced Processing Section */}
+        {processingView === 'enhanced' && databaseStatus && databaseStatus.categories > 0 && databaseStatus.words > 0 && (
+          <div className="max-w-5xl mx-auto mb-8">
+            <EnhancedProcessing />
+          </div>
+        )}
+
+        {/* Simple Processing Section */}
+        {processingView === 'simple' && databaseStatus && databaseStatus.categories > 0 && databaseStatus.words > 0 && (
           <div className="max-w-3xl mx-auto mb-8">
             <div className="card p-6">
               <div className="flex items-center justify-between mb-6">
@@ -361,8 +400,8 @@ export default function Home() {
           </div>
         )}
 
-        {/* Real-time Results Feed */}
-        {(results.length > 0 || isProcessing) && (
+        {/* Real-time Results Feed - Only for simple processing */}
+        {processingView === 'simple' && (results.length > 0 || isProcessing) && (
           <div className="max-w-3xl mx-auto">
             <RealTimeResultsFeed 
               results={results}
