@@ -238,7 +238,7 @@ async function getGlobalAnalytics(dateFilter: any) {
         averageTokensPerWord: processedWords > 0 ? totalTokens / processedWords : 0
       },
       performance: {
-        averageProcessingTime,
+        averageProcessingTime: avgProcessingTime,
         averageWordsPerSession: totalSessions > 0 ? processedWords / totalSessions : 0,
         averageSessionDuration: calculateAverageSessionDuration(sessions)
       },
