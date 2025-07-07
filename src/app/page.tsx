@@ -137,7 +137,7 @@ export default function Home() {
             <WizardLogo className="h-16 w-16 text-zinc-900 dark:text-white" />
           </div>
           <h1 className="text-4xl font-bold tracking-tight mb-4">
-            Domain Categorizer
+            Categorizator
           </h1>
           <p className="text-zinc-600 dark:text-zinc-400 text-sm">
             AI-powered categorization for domain names and word lists

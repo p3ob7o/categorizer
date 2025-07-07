@@ -1,4 +1,4 @@
-# Domain Categorizer
+# Categorizator
 
 An AI-powered web application for categorizing premium domain names using OpenAI's GPT models. The application processes lists of words, detects their languages, translates non-English words, and categorizes them based on provided categories.
 

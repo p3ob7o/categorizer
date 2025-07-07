@@ -11,7 +11,7 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'Domain Categorizer',
+  title: 'Categorizator',
   description: 'AI-powered domain name categorization tool',
 }
 
@@ -32,7 +32,7 @@ export default function RootLayout({
                   <div className="flex items-center space-x-4">
                     <a href="/" className="flex items-center space-x-2">
                       <WizardLogo className="h-6 w-6 text-zinc-900 dark:text-white" />
-                      <span className="text-sm font-medium">Domain Categorizer</span>
+                      <span className="text-sm font-medium">Categorizator</span>
                     </a>
                   </div>
                   <div className="flex items-center space-x-2">
