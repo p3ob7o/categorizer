@@ -113,14 +113,49 @@ Respond with just the category name or an empty string if no good match.`
                   )
                   
                   await withConnection(async () => {
-                    return prisma.word.update({
-                      where: { id: word.id },
-                      data: {
-                        languageId: detectedLanguage?.id || null,
-                        englishTranslation: result.englishTranslation,
-                        category: detectedCategory?.name || null
+                    // Handle potential unique constraint violation
+                    try {
+                      return await prisma.word.update({
+                        where: { id: word.id },
+                        data: {
+                          languageId: detectedLanguage?.id || null,
+                          englishTranslation: result.englishTranslation,
+                          category: detectedCategory?.name || null
+                        }
+                      })
+                    } catch (updateError: any) {
+                      // If unique constraint violation, try to find existing word and update it
+                      if (updateError.code === 'P2002') {
+                        console.log(`Unique constraint violation for word "${word.word}", attempting to resolve...`)
+                        
+                        // Find the existing word with the same word and languageId
+                        const existingWord = await prisma.word.findFirst({
+                          where: {
+                            word: word.word,
+                            languageId: detectedLanguage?.id || null
+                          }
+                        })
+                        
+                        if (existingWord && existingWord.id !== word.id) {
+                          // Update the existing word and delete the current one
+                          await prisma.word.update({
+                            where: { id: existingWord.id },
+                            data: {
+                              englishTranslation: result.englishTranslation,
+                              category: detectedCategory?.name || null
+                            }
+                          })
+                          
+                          // Delete the duplicate word
+                          await prisma.word.delete({
+                            where: { id: word.id }
+                          })
+                          
+                          return existingWord
+                        }
                       }
-                    })
+                      throw updateError
+                    }
                   })
                   
                   return result
@@ -178,14 +213,49 @@ Respond with just the category name or an empty string if no good match.`
                 )
                 
                 await withConnection(async () => {
-                  return prisma.word.update({
-                    where: { id: word.id },
-                    data: {
-                      languageId: detectedLanguage?.id || null,
-                      englishTranslation: result.englishTranslation,
-                      category: detectedCategory?.name || null
+                  // Handle potential unique constraint violation
+                  try {
+                    return await prisma.word.update({
+                      where: { id: word.id },
+                      data: {
+                        languageId: detectedLanguage?.id || null,
+                        englishTranslation: result.englishTranslation,
+                        category: detectedCategory?.name || null
+                      }
+                    })
+                  } catch (updateError: any) {
+                    // If unique constraint violation, try to find existing word and update it
+                    if (updateError.code === 'P2002') {
+                      console.log(`Unique constraint violation for word "${word.word}", attempting to resolve...`)
+                      
+                      // Find the existing word with the same word and languageId
+                      const existingWord = await prisma.word.findFirst({
+                        where: {
+                          word: word.word,
+                          languageId: detectedLanguage?.id || null
+                        }
+                      })
+                      
+                      if (existingWord && existingWord.id !== word.id) {
+                        // Update the existing word and delete the current one
+                        await prisma.word.update({
+                          where: { id: existingWord.id },
+                          data: {
+                            englishTranslation: result.englishTranslation,
+                            category: detectedCategory?.name || null
+                          }
+                        })
+                        
+                        // Delete the duplicate word
+                        await prisma.word.delete({
+                          where: { id: word.id }
+                        })
+                        
+                        return existingWord
+                      }
                     }
-                  })
+                    throw updateError
+                  }
                 })
                 
                 // Send result

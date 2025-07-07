@@ -204,4 +204,69 @@ export const withApiConnection = <T extends any[], R>(
   }
 }
 
+// Function to clean up duplicate words
+export const cleanupDuplicateWords = async (): Promise<void> => {
+  try {
+    console.log('Starting duplicate word cleanup...')
+    
+    // Find duplicate words (same word and languageId)
+    const duplicates = await prisma.$queryRaw<Array<{
+      word: string
+      languageId: number | null
+      count: number
+    }>>`
+      SELECT word, "languageId", COUNT(*) as count
+      FROM "Word"
+      GROUP BY word, "languageId"
+      HAVING COUNT(*) > 1
+    `
+    
+    console.log(`Found ${duplicates.length} sets of duplicate words`)
+    
+    for (const duplicate of duplicates) {
+      // Get all words with the same word and languageId
+      const words = await prisma.word.findMany({
+        where: {
+          word: duplicate.word,
+          languageId: duplicate.languageId
+        },
+        orderBy: { createdAt: 'asc' } // Keep the oldest one
+      })
+      
+      if (words.length > 1) {
+        // Keep the first (oldest) word and delete the rest
+        const [keepWord, ...deleteWords] = words
+        
+        console.log(`Keeping word "${keepWord.word}" (ID: ${keepWord.id}), deleting ${deleteWords.length} duplicates`)
+        
+        // Update the kept word with the latest information from duplicates
+        const latestWord = words[words.length - 1]
+        if (latestWord.englishTranslation || latestWord.category) {
+          await prisma.word.update({
+            where: { id: keepWord.id },
+            data: {
+              englishTranslation: latestWord.englishTranslation || keepWord.englishTranslation,
+              category: latestWord.category || keepWord.category
+            }
+          })
+        }
+        
+        // Delete the duplicate words
+        await prisma.word.deleteMany({
+          where: {
+            id: {
+              in: deleteWords.map(w => w.id)
+            }
+          }
+        })
+      }
+    }
+    
+    console.log('Duplicate word cleanup completed')
+  } catch (error) {
+    console.error('Error during duplicate cleanup:', error)
+    throw error
+  }
+}
+
  
