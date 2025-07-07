@@ -59,7 +59,6 @@ export default function Home() {
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false)
   const [selectedWords, setSelectedWords] = useState<number[]>([])
   const [allWords, setAllWords] = useState<any[]>([])
-  const [showAdvancedConfig, setShowAdvancedConfig] = useState(false)
   
   // Configuration state
   const [config, setConfig] = useState<ProcessingConfig>({
@@ -403,15 +402,8 @@ export default function Home() {
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-medium">Words to Process ({selectedWords.length} selected)</h3>
-                  <button
-                    onClick={() => setShowAdvancedConfig(!showAdvancedConfig)}
-                    className="btn btn-ghost text-xs"
-                  >
-                    <Settings className="h-3 w-3 mr-1" />
-                    {showAdvancedConfig ? 'Hide' : 'Show'} Advanced
-                  </button>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 mb-4">
                   <button
                     onClick={() => {
                       const unprocessed = allWords.filter(w => !w.languageId || !w.category)
@@ -434,66 +426,50 @@ export default function Home() {
                     Clear Selection
                   </button>
                 </div>
-              </div>
 
-              {/* Advanced Configuration */}
-              {showAdvancedConfig && (
-                <div className="mb-6 p-4 border rounded-md bg-zinc-50 dark:bg-zinc-900/50">
-                  <h3 className="text-sm font-medium mb-4">Advanced Configuration</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Processing Mode</label>
-                      <select
-                        value={config.mode}
-                        onChange={(e) => setConfig(prev => ({ ...prev, mode: e.target.value as ProcessingMode }))}
-                        className="w-full px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800"
-                      >
-                        <option value="batch">Sequential (Batch)</option>
-                        <option value="parallel">Parallel</option>
-                      </select>
-                    </div>
+                {/* Configuration Options */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Chunk Size</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="50"
+                      value={config.chunkSize}
+                      onChange={(e) => setConfig(prev => ({ ...prev, chunkSize: parseInt(e.target.value) || 10 }))}
+                      className="w-full px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800"
+                    />
+                    <p className="text-xs text-zinc-500 mt-1">Number of words processed per chunk (1-50)</p>
+                  </div>
 
-                    <div>
-                      <label className="block text-xs font-medium mb-1">AI Model</label>
-                      <select
-                        value={config.model}
-                        onChange={(e) => setConfig(prev => ({ ...prev, model: e.target.value }))}
-                        className="w-full px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800"
-                      >
-                        <option value="gpt-4o-mini">GPT-4O Mini (Recommended)</option>
-                        <option value="gpt-4o">GPT-4O</option>
-                        <option value="gpt-4">GPT-4</option>
-                        <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Chunk Size</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="50"
-                        value={config.chunkSize}
-                        onChange={(e) => setConfig(prev => ({ ...prev, chunkSize: parseInt(e.target.value) || 10 }))}
-                        className="w-full px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800"
-                      />
-                      <p className="text-xs text-zinc-500 mt-1">Number of words processed per chunk (1-50)</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Max Retries</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="10"
-                        value={config.maxRetries}
-                        onChange={(e) => setConfig(prev => ({ ...prev, maxRetries: parseInt(e.target.value) || 3 }))}
-                        className="w-full px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Max Retries</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="10"
+                      value={config.maxRetries}
+                      onChange={(e) => setConfig(prev => ({ ...prev, maxRetries: parseInt(e.target.value) || 3 }))}
+                      className="w-full px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800"
+                    />
+                    <p className="text-xs text-zinc-500 mt-1">Number of retry attempts for failed words</p>
                   </div>
                 </div>
-              )}
+
+                <div>
+                  <label className="block text-xs font-medium mb-1">AI Model</label>
+                  <select
+                    value={config.model}
+                    onChange={(e) => setConfig(prev => ({ ...prev, model: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800"
+                  >
+                    <option value="gpt-4o-mini">GPT-4O Mini (Recommended)</option>
+                    <option value="gpt-4o">GPT-4O</option>
+                    <option value="gpt-4">GPT-4</option>
+                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                  </select>
+                </div>
+              </div>
 
               {/* Processing Mode Selection */}
               <div className="grid grid-cols-2 gap-3 mb-6">
