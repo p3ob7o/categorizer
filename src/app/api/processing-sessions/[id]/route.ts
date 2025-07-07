@@ -5,10 +5,10 @@ import { ProcessingService, ProcessingConfig } from '@/lib/processing'
 // Get session details
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const sessionId = params.id
+    const { id: sessionId } = await params
 
     const session = await withConnection(async () => {
       return prisma.processingSession.findUnique({
@@ -66,10 +66,10 @@ export async function GET(
 // Update session (pause, resume, etc.)
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const sessionId = params.id
+    const { id: sessionId } = await params
     const body = await request.json()
     const { action } = body
 
@@ -174,10 +174,10 @@ export async function PATCH(
 // Delete session
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const sessionId = params.id
+    const { id: sessionId } = await params
 
     const session = await withConnection(async () => {
       return prisma.processingSession.findUnique({
