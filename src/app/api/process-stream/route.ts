@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { mode = 'batch', model = 'gpt-4o-mini', langPrompt, catPrompt, wordIds } = body
 
-    // Get data from database
+    // Get data from database with connection management
     const [categories, languages] = await Promise.all([
       prisma.category.findMany({ orderBy: { name: 'asc' } }),
       prisma.language.findMany({ orderBy: [{ priority: 'asc' }, { name: 'asc' }] })
@@ -227,6 +227,12 @@ Respond with just the category name or an empty string if no good match.`
             error: 'Processing failed'
           })
         } finally {
+          // Ensure database connection is cleaned up
+          try {
+            await prisma.$disconnect()
+          } catch (disconnectError) {
+            console.error('Error disconnecting from database:', disconnectError)
+          }
           controller.close()
         }
       }

@@ -213,5 +213,14 @@ Respond with just the category name or an empty string if no good match.`;
   } catch (error) {
     console.error('Process error:', error)
     return NextResponse.json({ error: 'Processing failed' }, { status: 500 })
+  } finally {
+    // Ensure database connection is cleaned up for serverless
+    if (process.env.VERCEL) {
+      try {
+        await prisma.$disconnect()
+      } catch (disconnectError) {
+        console.error('Error disconnecting from database:', disconnectError)
+      }
+    }
   }
 } 
