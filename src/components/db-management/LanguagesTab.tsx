@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Globe, Upload, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Globe, Upload, X, Trash } from 'lucide-react';
+import ConfirmationModal from '../ConfirmationModal';
 
 interface Language {
   id: number;
@@ -27,6 +28,8 @@ export default function LanguagesTab() {
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [isClearingList, setIsClearingList] = useState(false);
 
   useEffect(() => {
     fetchLanguages();
@@ -164,6 +167,30 @@ export default function LanguagesTab() {
     }
   };
 
+  const handleClearList = async () => {
+    setIsClearingList(true);
+    try {
+      const response = await fetch('/api/languages', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmation: 'languages' }),
+      });
+
+      if (response.ok) {
+        await fetchLanguages();
+        setShowClearModal(false);
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to clear languages');
+      }
+    } catch (error) {
+      console.error('Error clearing languages:', error);
+      alert('Failed to clear languages');
+    } finally {
+      setIsClearingList(false);
+    }
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center py-12">
       <div className="text-sm text-zinc-600 dark:text-zinc-400">Loading languages...</div>
@@ -187,6 +214,13 @@ export default function LanguagesTab() {
         >
           <Upload className="h-3 w-3 mr-1.5" />
           Bulk Upload
+        </button>
+        <button 
+          onClick={() => setShowClearModal(true)}
+          className="btn btn-ghost text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+        >
+          <Trash className="h-3 w-3 mr-1.5" />
+          Clear List
         </button>
       </div>
 
@@ -416,6 +450,18 @@ export default function LanguagesTab() {
           </div>
         </div>
       )}
+
+      {/* Clear List Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showClearModal}
+        onClose={() => setShowClearModal(false)}
+        onConfirm={handleClearList}
+        title="Clear All Languages"
+        message="This will permanently delete all languages from the database. This action cannot be undone."
+        confirmationText="languages"
+        confirmButtonText="Clear All Languages"
+        isLoading={isClearingList}
+      />
     </div>
   );
 } 

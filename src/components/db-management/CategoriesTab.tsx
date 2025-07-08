@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Upload, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Upload, X, Trash } from 'lucide-react';
+import ConfirmationModal from '../ConfirmationModal';
 
 interface Category {
   id: number;
@@ -21,6 +22,8 @@ export default function CategoriesTab() {
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [isClearingList, setIsClearingList] = useState(false);
 
   useEffect(() => {
     fetchCategories();
@@ -144,6 +147,30 @@ export default function CategoriesTab() {
     }
   };
 
+  const handleClearList = async () => {
+    setIsClearingList(true);
+    try {
+      const response = await fetch('/api/categories', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmation: 'categories' }),
+      });
+
+      if (response.ok) {
+        await fetchCategories();
+        setShowClearModal(false);
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to clear categories');
+      }
+    } catch (error) {
+      console.error('Error clearing categories:', error);
+      alert('Failed to clear categories');
+    } finally {
+      setIsClearingList(false);
+    }
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center py-12">
       <div className="text-sm text-zinc-600 dark:text-zinc-400">Loading categories...</div>
@@ -167,6 +194,13 @@ export default function CategoriesTab() {
         >
           <Upload className="h-3 w-3 mr-1.5" />
           Bulk Upload
+        </button>
+        <button 
+          onClick={() => setShowClearModal(true)}
+          className="btn btn-ghost text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+        >
+          <Trash className="h-3 w-3 mr-1.5" />
+          Clear List
         </button>
       </div>
 
@@ -346,6 +380,18 @@ export default function CategoriesTab() {
           </div>
         </div>
       )}
+
+      {/* Clear List Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showClearModal}
+        onClose={() => setShowClearModal(false)}
+        onConfirm={handleClearList}
+        title="Clear All Categories"
+        message="This will permanently delete all categories from the database. This action cannot be undone."
+        confirmationText="categories"
+        confirmButtonText="Clear All Categories"
+        isLoading={isClearingList}
+      />
     </div>
   );
 } 

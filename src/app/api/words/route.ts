@@ -99,4 +99,35 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { confirmation } = body;
+    
+    if (confirmation !== 'words') {
+      return NextResponse.json(
+        { error: 'Invalid confirmation. You must type "words" to confirm deletion.' },
+        { status: 400 }
+      );
+    }
+    
+    const deletedCount = await withConnection(async () => {
+      const result = await prisma.word.deleteMany({});
+      return result.count;
+    });
+    
+    return NextResponse.json({ 
+      success: true, 
+      message: `Successfully deleted ${deletedCount} words` 
+    });
+  } catch (error: any) {
+    console.error('Error deleting all words:', error);
+    
+    return NextResponse.json(
+      { error: 'Failed to delete words' },
+      { status: 500 }
+    );
+  }
 } 

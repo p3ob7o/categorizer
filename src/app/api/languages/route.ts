@@ -34,29 +34,62 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const language = await withConnection(async () => {
+    const languageData: any = {
+      name: name.trim(),
+      code: code?.trim() || null,
+      priority: priority ? parseInt(priority) : 0,
+    };
+    
+    const newLanguage = await withConnection(async () => {
       return prisma.language.create({
-        data: {
-          name: name.trim(),
-          code: code?.trim() || null,
-          priority: priority || 999,
-        },
+        data: languageData,
       });
     });
     
-    return NextResponse.json(language);
+    return NextResponse.json(newLanguage);
   } catch (error: any) {
     console.error('Error creating language:', error);
     
     if (error.code === 'P2002') {
       return NextResponse.json(
-        { error: 'Language name or code already exists' },
+        { error: 'This language already exists' },
         { status: 409 }
       );
     }
     
     return NextResponse.json(
       { error: 'Failed to create language' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { confirmation } = body;
+    
+    if (confirmation !== 'languages') {
+      return NextResponse.json(
+        { error: 'Invalid confirmation. You must type "languages" to confirm deletion.' },
+        { status: 400 }
+      );
+    }
+    
+    const deletedCount = await withConnection(async () => {
+      const result = await prisma.language.deleteMany({});
+      return result.count;
+    });
+    
+    return NextResponse.json({ 
+      success: true, 
+      message: `Successfully deleted ${deletedCount} languages` 
+    });
+  } catch (error: any) {
+    console.error('Error deleting all languages:', error);
+    
+    return NextResponse.json(
+      { error: 'Failed to delete languages' },
       { status: 500 }
     );
   }
