@@ -23,11 +23,7 @@ export interface Language {
   updatedAt: string
 }
 
-export interface UploadedFiles {
-  categories: string[]
-  languages: string[]
-  words: string[]
-}
+
 
 export interface ProcessingResult {
   originalWord: string

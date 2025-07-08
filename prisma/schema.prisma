@@ -14,18 +14,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Session {
-  id              String      @id @default(uuid())
-  status          String      @default("pending")
-  totalWords      Int         @default(0)
-  processedWords  Int         @default(0)
-  currentWord     String?
-  error           String?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  
-  results         Result[]
-}
+
 
 model Category {
   id          Int         @id @default(autoincrement())
@@ -60,16 +49,4 @@ model Word {
   @@index([languageId])
 }
 
-model Result {
-  id                  Int         @id @default(autoincrement())
-  sessionId           String
-  originalWord        String
-  language            String?
-  englishTranslation  String?
-  category            String?
-  processedAt         DateTime    @default(now())
-  
-  session             Session     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  
-  @@index([sessionId])
-}
+

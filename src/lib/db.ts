@@ -269,4 +269,263 @@ export const cleanupDuplicateWords = async (): Promise<void> => {
   }
 }
 
+// Normalized language matching utility
+export const findMatchingLanguage = (
+  detectedLanguage: string,
+  availableLanguages: Array<{ id: number; name: string; code?: string | null }>
+): { id: number; name: string; code?: string | null } | null => {
+  if (!detectedLanguage) return null
+  
+  const normalizedDetected = detectedLanguage.toLowerCase().trim()
+  
+  // Direct name match (highest priority)
+  for (const lang of availableLanguages) {
+    if (lang.name.toLowerCase() === normalizedDetected) {
+      return lang
+    }
+  }
+  
+  // Language code match
+  for (const lang of availableLanguages) {
+    if (lang.code && lang.code.toLowerCase() === normalizedDetected) {
+      return lang
+    }
+  }
+  
+  // Common language variations and aliases
+  const languageAliases: Record<string, string[]> = {
+    'english': ['en', 'eng', 'english'],
+    'spanish': ['es', 'esp', 'spanish', 'español'],
+    'french': ['fr', 'fra', 'french', 'français'],
+    'german': ['de', 'deu', 'german', 'deutsch'],
+    'italian': ['it', 'ita', 'italian', 'italiano'],
+    'portuguese': ['pt', 'por', 'portuguese', 'português'],
+    'dutch': ['nl', 'nld', 'dutch', 'nederlands'],
+    'russian': ['ru', 'rus', 'russian', 'русский'],
+    'chinese': ['zh', 'chi', 'chinese', 'mandarin', '中文'],
+    'japanese': ['ja', 'jpn', 'japanese', '日本語'],
+    'korean': ['ko', 'kor', 'korean', '한국어'],
+    'arabic': ['ar', 'ara', 'arabic', 'العربية'],
+    'hindi': ['hi', 'hin', 'hindi', 'हिन्दी'],
+  }
+  
+  // Check aliases
+  for (const lang of availableLanguages) {
+    const langKey = lang.name.toLowerCase()
+    const aliases = languageAliases[langKey] || []
+    
+    if (aliases.includes(normalizedDetected)) {
+      return lang
+    }
+  }
+  
+  // Partial match (starts with)
+  for (const lang of availableLanguages) {
+    if (lang.name.toLowerCase().startsWith(normalizedDetected) || 
+        normalizedDetected.startsWith(lang.name.toLowerCase())) {
+      return lang
+    }
+  }
+  
+  return null
+}
+
+// Normalized category matching utility
+export const findMatchingCategory = (
+  detectedCategory: string,
+  availableCategories: Array<{ id: number; name: string }>
+): { id: number; name: string } | null => {
+  if (!detectedCategory) return null
+  
+  const normalizedDetected = detectedCategory.toLowerCase().trim()
+  
+  // Direct match
+  for (const cat of availableCategories) {
+    if (cat.name.toLowerCase() === normalizedDetected) {
+      return cat
+    }
+  }
+  
+  // Partial match
+  for (const cat of availableCategories) {
+    if (cat.name.toLowerCase().includes(normalizedDetected) ||
+        normalizedDetected.includes(cat.name.toLowerCase())) {
+      return cat
+    }
+  }
+  
+  return null
+}
+
+// Cache for frequently accessed data
+interface CacheEntry<T> {
+  data: T
+  timestamp: number
+  ttl: number
+}
+
+const cache = new Map<string, CacheEntry<any>>()
+
+// Cache TTL in milliseconds (5 minutes)
+const DEFAULT_CACHE_TTL = 5 * 60 * 1000
+
+// Cache utilities
+export const getCachedData = <T>(key: string): T | null => {
+  const entry = cache.get(key)
+  if (!entry) return null
+  
+  if (Date.now() - entry.timestamp > entry.ttl) {
+    cache.delete(key)
+    return null
+  }
+  
+  return entry.data
+}
+
+export const setCachedData = <T>(key: string, data: T, ttl: number = DEFAULT_CACHE_TTL): void => {
+  cache.set(key, {
+    data,
+    timestamp: Date.now(),
+    ttl
+  })
+}
+
+export const clearCache = (pattern?: string): void => {
+  if (pattern) {
+    for (const key of cache.keys()) {
+      if (key.includes(pattern)) {
+        cache.delete(key)
+      }
+    }
+  } else {
+    cache.clear()
+  }
+}
+
+// Cached database queries
+export const getCachedCategories = async () => {
+  const cached = getCachedData<any[]>('categories')
+  if (cached) return cached
+  
+  const categories = await withConnection(async () => {
+    return prisma.category.findMany({ orderBy: { name: 'asc' } })
+  })
+  
+  setCachedData('categories', categories)
+  return categories
+}
+
+export const getCachedLanguages = async () => {
+  const cached = getCachedData<any[]>('languages')
+  if (cached) return cached
+  
+  const languages = await withConnection(async () => {
+    return prisma.language.findMany({ orderBy: [{ priority: 'asc' }, { name: 'asc' }] })
+  })
+  
+  setCachedData('languages', languages)
+  return languages
+}
+
+// Batch database operations
+export const batchUpdateWords = async (updates: Array<{ id: number; data: any }>) => {
+  return withConnection(async () => {
+    const promises = updates.map(update => 
+      prisma.word.update({
+        where: { id: update.id },
+        data: update.data
+      })
+    )
+    return Promise.all(promises)
+  })
+}
+
+// Safe upsert operation for words to handle duplicates
+export const upsertWord = async (
+  wordText: string,
+  languageId: number | null,
+  englishTranslation: string,
+  category: string | null
+) => {
+  return withConnection(async () => {
+    return prisma.$transaction(async (tx) => {
+      // Try to find existing word first
+      const existingWord = await tx.word.findFirst({
+        where: {
+          word: wordText,
+          languageId: languageId
+        }
+      })
+
+      if (existingWord) {
+        // Update existing word
+        return tx.word.update({
+          where: { id: existingWord.id },
+          data: {
+            englishTranslation,
+            category
+          },
+          include: { language: true }
+        })
+      } else {
+        // Create new word
+        return tx.word.create({
+          data: {
+            word: wordText,
+            languageId,
+            englishTranslation,
+            category
+          },
+          include: { language: true }
+        })
+      }
+    })
+  })
+}
+
+// Batch upsert for better performance
+export const batchUpsertWords = async (
+  updates: Array<{
+    word: string
+    languageId: number | null
+    englishTranslation: string
+    category: string | null
+  }>
+) => {
+  return withConnection(async () => {
+    return prisma.$transaction(async (tx) => {
+      const results = []
+      
+      for (const update of updates) {
+        const existingWord = await tx.word.findFirst({
+          where: {
+            word: update.word,
+            languageId: update.languageId
+          }
+        })
+
+        if (existingWord) {
+          const updated = await tx.word.update({
+            where: { id: existingWord.id },
+            data: {
+              englishTranslation: update.englishTranslation,
+              category: update.category
+            },
+            include: { language: true }
+          })
+          results.push(updated)
+        } else {
+          const created = await tx.word.create({
+            data: update,
+            include: { language: true }
+          })
+          results.push(created)
+        }
+      }
+      
+      return results
+    })
+  })
+}
+
  

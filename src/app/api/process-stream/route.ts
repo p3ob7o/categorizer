@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { processWord } from '@/lib/openai'
-import { prisma, withRetry, withConnection, safeDisconnect } from '@/lib/db'
+import { processWord, processWordOptimized } from '@/lib/openai'
+import { prisma, withRetry, withConnection, safeDisconnect, getCachedCategories, getCachedLanguages, upsertWord, findMatchingLanguage, findMatchingCategory } from '@/lib/db'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { mode = 'batch', model = 'gpt-4o-mini', langPrompt, catPrompt, wordIds } = body
 
-    // Get data from database with connection management and retry logic
-    const [categories, languages] = await withConnection(async () => {
-      return Promise.all([
-        prisma.category.findMany({ orderBy: { name: 'asc' } }),
-        prisma.language.findMany({ orderBy: [{ priority: 'asc' }, { name: 'asc' }] })
-      ])
-    })
+    // Get data from database with caching to reduce queries
+    const [categories, languages] = await Promise.all([
+      getCachedCategories(),
+      getCachedLanguages()
+    ])
 
     if (!categories.length) {
       return NextResponse.json({ 
@@ -66,13 +64,36 @@ Available categories: {categories}
 
 Respond with just the category name or an empty string if no good match.`
 
-    // Create a readable stream for Server-Sent Events
+    // Create a readable stream for Server-Sent Events with memory management
+    let isAborted = false
     const stream = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder()
+        let processedResults = 0
+        const MEMORY_CLEANUP_INTERVAL = 50 // Clean up every 50 results
         
         const sendEvent = (data: any) => {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+          if (isAborted) return
+          try {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+          } catch (error) {
+            console.log('Stream already closed, stopping event sending')
+            isAborted = true
+          }
+        }
+        
+        // Memory cleanup function
+        const cleanupMemory = () => {
+          if (global.gc) {
+            global.gc()
+          }
+        }
+        
+        // Cleanup function for graceful shutdown
+        const cleanup = async () => {
+          isAborted = true
+          await safeDisconnect()
+          cleanupMemory()
         }
 
         // Send initial status
@@ -83,6 +104,12 @@ Respond with just the category name or an empty string if no good match.`
           isProcessing: true
         })
 
+        // Handle client disconnection
+        const handleAbort = () => {
+          console.log('Client disconnected, cleaning up...')
+          cleanup()
+        }
+        
         try {
           if (mode === 'parallel') {
             // Process in parallel batches
@@ -94,69 +121,30 @@ Respond with just the category name or an empty string if no good match.`
               
               const batchPromises = batch.map(async (word) => {
                 try {
-                  const result = await processWord(
+                  // Use optimized version if using default prompts
+                  const isUsingDefaultPrompts = !langPrompt && !catPrompt
+                  const result = isUsingDefaultPrompts 
+                    ? await processWordOptimized(word.word, categoryNames, languageNames, model)
+                    : await processWord(
+                        word.word,
+                        categoryNames,
+                        languageNames,
+                        model,
+                        finalLangPrompt,
+                        finalCatPrompt
+                      )
+                  
+                  // Update database with improved matching
+                  const detectedLanguage = findMatchingLanguage(result.language, languages)
+                  const detectedCategory = findMatchingCategory(result.category, categories)
+                  
+                  // Use safe upsert to handle duplicates properly
+                  await upsertWord(
                     word.word,
-                    categoryNames,
-                    languageNames,
-                    model,
-                    finalLangPrompt,
-                    finalCatPrompt
+                    detectedLanguage?.id || null,
+                    result.englishTranslation,
+                    detectedCategory?.name || null
                   )
-                  
-                  // Update database
-                  const detectedLanguage = languages.find(l => 
-                    l.name.toLowerCase() === result.language.toLowerCase()
-                  )
-                  
-                  const detectedCategory = categories.find(c => 
-                    c.name.toLowerCase() === result.category.toLowerCase()
-                  )
-                  
-                  await withConnection(async () => {
-                    // Handle potential unique constraint violation
-                    try {
-                      return await prisma.word.update({
-                        where: { id: word.id },
-                        data: {
-                          languageId: detectedLanguage?.id || null,
-                          englishTranslation: result.englishTranslation,
-                          category: detectedCategory?.name || null
-                        }
-                      })
-                    } catch (updateError: any) {
-                      // If unique constraint violation, try to find existing word and update it
-                      if (updateError.code === 'P2002') {
-                        console.log(`Unique constraint violation for word "${word.word}", attempting to resolve...`)
-                        
-                        // Find the existing word with the same word and languageId
-                        const existingWord = await prisma.word.findFirst({
-                          where: {
-                            word: word.word,
-                            languageId: detectedLanguage?.id || null
-                          }
-                        })
-                        
-                        if (existingWord && existingWord.id !== word.id) {
-                          // Update the existing word and delete the current one
-                          await prisma.word.update({
-                            where: { id: existingWord.id },
-                            data: {
-                              englishTranslation: result.englishTranslation,
-                              category: detectedCategory?.name || null
-                            }
-                          })
-                          
-                          // Delete the duplicate word
-                          await prisma.word.delete({
-                            where: { id: word.id }
-                          })
-                          
-                          return existingWord
-                        }
-                      }
-                      throw updateError
-                    }
-                  })
                   
                   return result
                 } catch (error) {
@@ -172,15 +160,22 @@ Respond with just the category name or an empty string if no good match.`
               
               const batchResults = await Promise.all(batchPromises)
               
-              // Send each result individually
+              // Send each result individually with memory management
               for (const result of batchResults) {
                 processedCount++
+                processedResults++
+                
                 sendEvent({
                   type: 'result',
                   result,
                   processedWords: processedCount,
                   totalWords: words.length
                 })
+                
+                // Periodic memory cleanup
+                if (processedResults % MEMORY_CLEANUP_INTERVAL === 0) {
+                  cleanupMemory()
+                }
               }
               
               // Small delay between batches
@@ -194,77 +189,44 @@ Respond with just the category name or an empty string if no good match.`
               const word = words[i]
               
               try {
-                const result = await processWord(
+                // Use optimized version if using default prompts
+                const isUsingDefaultPrompts = !langPrompt && !catPrompt
+                const result = isUsingDefaultPrompts 
+                  ? await processWordOptimized(word.word, categoryNames, languageNames, model)
+                  : await processWord(
+                      word.word,
+                      categoryNames,
+                      languageNames,
+                      model,
+                      finalLangPrompt,
+                      finalCatPrompt
+                    )
+                
+                // Update database with improved matching
+                const detectedLanguage = findMatchingLanguage(result.language, languages)
+                const detectedCategory = findMatchingCategory(result.category, categories)
+                
+                // Use safe upsert to handle duplicates properly
+                await upsertWord(
                   word.word,
-                  categoryNames,
-                  languageNames,
-                  model,
-                  finalLangPrompt,
-                  finalCatPrompt
+                  detectedLanguage?.id || null,
+                  result.englishTranslation,
+                  detectedCategory?.name || null
                 )
                 
-                // Update database
-                const detectedLanguage = languages.find(l => 
-                  l.name.toLowerCase() === result.language.toLowerCase()
-                )
-                
-                const detectedCategory = categories.find(c => 
-                  c.name.toLowerCase() === result.category.toLowerCase()
-                )
-                
-                await withConnection(async () => {
-                  // Handle potential unique constraint violation
-                  try {
-                    return await prisma.word.update({
-                      where: { id: word.id },
-                      data: {
-                        languageId: detectedLanguage?.id || null,
-                        englishTranslation: result.englishTranslation,
-                        category: detectedCategory?.name || null
-                      }
-                    })
-                  } catch (updateError: any) {
-                    // If unique constraint violation, try to find existing word and update it
-                    if (updateError.code === 'P2002') {
-                      console.log(`Unique constraint violation for word "${word.word}", attempting to resolve...`)
-                      
-                      // Find the existing word with the same word and languageId
-                      const existingWord = await prisma.word.findFirst({
-                        where: {
-                          word: word.word,
-                          languageId: detectedLanguage?.id || null
-                        }
-                      })
-                      
-                      if (existingWord && existingWord.id !== word.id) {
-                        // Update the existing word and delete the current one
-                        await prisma.word.update({
-                          where: { id: existingWord.id },
-                          data: {
-                            englishTranslation: result.englishTranslation,
-                            category: detectedCategory?.name || null
-                          }
-                        })
-                        
-                        // Delete the duplicate word
-                        await prisma.word.delete({
-                          where: { id: word.id }
-                        })
-                        
-                        return existingWord
-                      }
-                    }
-                    throw updateError
-                  }
-                })
-                
-                // Send result
+                // Send result with memory management
+                processedResults++
                 sendEvent({
                   type: 'result',
                   result,
                   processedWords: i + 1,
                   totalWords: words.length
                 })
+                
+                // Periodic memory cleanup
+                if (processedResults % MEMORY_CLEANUP_INTERVAL === 0) {
+                  cleanupMemory()
+                }
                 
                 // Small delay to avoid rate limiting
                 if (i < words.length - 1) {
@@ -279,12 +241,18 @@ Respond with just the category name or an empty string if no good match.`
                   category: ''
                 }
                 
+                processedResults++
                 sendEvent({
                   type: 'result',
                   result: errorResult,
                   processedWords: i + 1,
                   totalWords: words.length
                 })
+                
+                // Periodic memory cleanup
+                if (processedResults % MEMORY_CLEANUP_INTERVAL === 0) {
+                  cleanupMemory()
+                }
               }
             }
           }
@@ -299,15 +267,28 @@ Respond with just the category name or an empty string if no good match.`
           
         } catch (error) {
           console.error('Stream processing error:', error)
-          sendEvent({
-            type: 'error',
-            error: 'Processing failed'
-          })
+          if (!isAborted) {
+            sendEvent({
+              type: 'error',
+              error: 'Processing failed'
+            })
+          }
         } finally {
-          // Ensure database connection is cleaned up
-          await safeDisconnect()
-          controller.close()
+          await cleanup()
+          if (!isAborted) {
+            try {
+              controller.close()
+            } catch (closeError) {
+              console.log('Controller already closed')
+            }
+          }
         }
+      },
+      
+      cancel() {
+        console.log('Stream cancelled by client')
+        isAborted = true
+        return safeDisconnect()
       }
     })
 

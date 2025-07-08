@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processBatch, processWord } from '@/lib/openai'
-import { prisma } from '@/lib/db'
+import { prisma, getCachedCategories, getCachedLanguages } from '@/lib/db'
 import { ProcessingResult } from '@/types'
 import { exportToCSV } from '@/lib/storage'
 
@@ -10,10 +10,10 @@ export async function POST(request: NextRequest) {
     const { action, mode = 'batch', model = 'gpt-4o-mini', langPrompt, catPrompt, wordIds } = body;
 
     if (action === 'start') {
-      // Get data from database
+      // Get data from database with caching
       const [categories, languages] = await Promise.all([
-        prisma.category.findMany({ orderBy: { name: 'asc' } }),
-        prisma.language.findMany({ orderBy: [{ priority: 'asc' }, { name: 'asc' }] })
+        getCachedCategories(),
+        getCachedLanguages()
       ])
 
       if (!categories.length) {
