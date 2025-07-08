@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import RealTimeResultsFeed from '@/components/RealTimeResultsFeed'
 import { PromptModal } from '@/components/PromptModal'
 import { ProcessingResult } from '@/types'
-import { Play, Download, Settings, Database, Zap, Layers, ArrowRight } from 'lucide-react'
+import { Play, Square, Download, Settings, Database, Zap, Layers, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 import WizardLogo from '@/components/WizardLogo'
 
@@ -15,7 +15,7 @@ const DEFAULT_CAT_PROMPT = `You are a categorization expert. Given a word and a 
 type ProcessingMode = 'batch' | 'parallel'
 
 export default function Home() {
-  const [databaseStatus, setDatabaseStatus] = useState<{ categories: number; words: number; languages: number } | null>(null)
+  const [databaseStatus, setDatabaseStatus] = useState<{ categories: number; words: number; languages: number; unprocessedWords: number } | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [processingMode, setProcessingMode] = useState<ProcessingMode>('batch')
   const [processedCount, setProcessedCount] = useState(0)
@@ -25,6 +25,10 @@ export default function Home() {
   const [langPrompt, setLangPrompt] = useState(DEFAULT_LANG_PROMPT)
   const [catPrompt, setCatPrompt] = useState(DEFAULT_CAT_PROMPT)
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false)
+  const [processOnlyUnprocessed, setProcessOnlyUnprocessed] = useState(false)
+  
+  // Ref to store the stream reader for cancellation
+  const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null)
 
   // Load initial status
   useEffect(() => {
@@ -43,10 +47,16 @@ export default function Home() {
       const words = await wordsRes.json()
       const languages = await languagesRes.json()
       
+      // Count unprocessed words (missing language, translation, or category)
+      const unprocessedWords = Array.isArray(words) 
+        ? words.filter(word => !word.languageId || !word.englishTranslation || !word.category).length
+        : 0
+      
       setDatabaseStatus({
         categories: Array.isArray(categories) ? categories.length : 0,
         words: Array.isArray(words) ? words.length : 0,
-        languages: Array.isArray(languages) ? languages.length : 0
+        languages: Array.isArray(languages) ? languages.length : 0,
+        unprocessedWords
       })
       
       // Set total words for processing
@@ -56,6 +66,15 @@ export default function Home() {
     } catch (error) {
       console.error('Failed to load database status:', error)
     }
+  }
+
+  const handleStopProcessing = () => {
+    if (readerRef.current) {
+      readerRef.current.cancel()
+      readerRef.current = null
+    }
+    setIsProcessing(false)
+    setError('Processing stopped by user')
   }
 
   const handleStartProcessing = async () => {
@@ -72,7 +91,8 @@ export default function Home() {
           mode: processingMode,
           model: DEFAULT_MODEL,
           langPrompt,
-          catPrompt
+          catPrompt,
+          onlyUnprocessed: processOnlyUnprocessed
         })
       })
 
@@ -92,47 +112,61 @@ export default function Home() {
         return
       }
 
-      // Process the stream
-      while (true) {
-        const { done, value } = await reader.read()
-        
-        if (done) {
-          break
-        }
+      // Store reader for cancellation
+      readerRef.current = reader
 
-        const chunk = decoder.decode(value)
-        const lines = chunk.split('\n')
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6))
-              
-              if (data.type === 'result') {
-                setResults(prev => [...prev, data.result])
-                setProcessedCount(data.processedWords)
-              } else if (data.type === 'status') {
-                setProcessedCount(data.processedWords)
-                setTotalWords(data.totalWords)
-              } else if (data.type === 'complete') {
-                setIsProcessing(false)
-                setProcessedCount(data.processedWords)
-                // Refresh database status to show updated words
-                await loadDatabaseStatus()
-              } else if (data.type === 'error') {
-                setError(data.error)
-                setIsProcessing(false)
+      // Process the stream
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          
+          if (done) {
+            break
+          }
+
+          const chunk = decoder.decode(value)
+          const lines = chunk.split('\n')
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6))
+                
+                if (data.type === 'result') {
+                  setResults(prev => [...prev, data.result])
+                  setProcessedCount(data.processedWords)
+                } else if (data.type === 'status') {
+                  setProcessedCount(data.processedWords)
+                  setTotalWords(data.totalWords)
+                } else if (data.type === 'complete') {
+                  setIsProcessing(false)
+                  setProcessedCount(data.processedWords)
+                  // Refresh database status to show updated words
+                  await loadDatabaseStatus()
+                } else if (data.type === 'error') {
+                  setError(data.error)
+                  setIsProcessing(false)
+                }
+              } catch (parseError) {
+                console.error('Error parsing stream data:', parseError)
               }
-            } catch (parseError) {
-              console.error('Error parsing stream data:', parseError)
             }
           }
         }
+      } catch (streamError: any) {
+        if (streamError.name !== 'AbortError') {
+          console.error('Streaming error:', streamError)
+          setError('Failed to process words')
+        }
+        setIsProcessing(false)
+      } finally {
+        readerRef.current = null
       }
     } catch (error) {
-      console.error('Streaming error:', error)
-      setError('Failed to process words')
+      console.error('Processing error:', error)
+      setError('Failed to start processing')
       setIsProcessing(false)
+      readerRef.current = null
     }
   }
 
@@ -272,11 +306,12 @@ export default function Home() {
               <div className="grid grid-cols-2 gap-3 mb-6">
                 <button
                   onClick={() => setProcessingMode('batch')}
+                  disabled={isProcessing}
                   className={`relative p-4 rounded-md border transition-all ${
                     processingMode === 'batch'
                       ? 'border-zinc-900 dark:border-white bg-zinc-50 dark:bg-zinc-900'
                       : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'
-                  }`}
+                  } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <Layers className="h-5 w-5 mb-2 text-zinc-700 dark:text-zinc-300" />
                   <h3 className="text-sm font-medium mb-1">Batch</h3>
@@ -289,11 +324,12 @@ export default function Home() {
                 </button>
                 <button
                   onClick={() => setProcessingMode('parallel')}
+                  disabled={isProcessing}
                   className={`relative p-4 rounded-md border transition-all ${
                     processingMode === 'parallel'
                       ? 'border-zinc-900 dark:border-white bg-zinc-50 dark:bg-zinc-900'
                       : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'
-                  }`}
+                  } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <Zap className="h-5 w-5 mb-2 text-zinc-700 dark:text-zinc-300" />
                   <h3 className="text-sm font-medium mb-1">Parallel</h3>
@@ -306,16 +342,38 @@ export default function Home() {
                 </button>
               </div>
 
-              {/* Start Processing Button */}
+              {/* Processing Options */}
+              <div className="mb-6">
+                <label className="flex items-center gap-3 p-3 rounded-md border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={processOnlyUnprocessed}
+                    onChange={(e) => setProcessOnlyUnprocessed(e.target.checked)}
+                    disabled={isProcessing}
+                    className="rounded border-zinc-300 dark:border-zinc-600 text-zinc-900 focus:ring-zinc-900 dark:focus:ring-zinc-100"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Process only unprocessed words</p>
+                    <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                      Skip words that already have language, translation, and category assigned
+                      {databaseStatus?.unprocessedWords !== undefined && (
+                        <span className="ml-1">({databaseStatus.unprocessedWords} unprocessed)</span>
+                      )}
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              {/* Start/Stop Processing Button */}
               <button
-                onClick={handleStartProcessing}
-                disabled={!canStartProcessing}
-                className="btn btn-primary w-full"
+                onClick={isProcessing ? handleStopProcessing : handleStartProcessing}
+                disabled={!isProcessing && !canStartProcessing}
+                className={`btn w-full ${isProcessing ? 'btn-secondary' : 'btn-primary'}`}
               >
                 {isProcessing ? (
                   <>
-                    <div className="h-3 w-3 border-2 border-zinc-300 border-t-transparent rounded-full animate-spin mr-2" />
-                    Processing {processedCount} of {totalWords}
+                    <Square className="h-3 w-3 mr-1.5" />
+                    Stop Processing
                   </>
                 ) : (
                   <>
@@ -331,21 +389,26 @@ export default function Home() {
                   <div className="flex justify-between text-xs text-zinc-600 dark:text-zinc-400 mb-2">
                     <span>
                       {processingMode === 'parallel' ? 'Parallel' : 'Sequential'} processing
+                      {processOnlyUnprocessed && ' (unprocessed only)'}
                       {processedCount > 0 && ` • ${processedCount}/${totalWords} words`}
                     </span>
-                    <span>{Math.round((processedCount / totalWords) * 100)}%</span>
+                    <span>{totalWords > 0 ? Math.round((processedCount / totalWords) * 100) : 0}%</span>
                   </div>
                   <div className="h-2 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-gradient-to-r from-blue-500 to-purple-600 transition-all duration-500 ease-out"
-                      style={{ width: `${(processedCount / totalWords) * 100}%` }}
+                      style={{ width: `${totalWords > 0 ? (processedCount / totalWords) * 100 : 0}%` }}
                     />
                   </div>
-                  {processedCount > 0 && (
-                    <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="text-xs text-zinc-500 dark:text-zinc-400">
                       Processing in real-time • Results appear below as they complete
                     </div>
-                  )}
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse" />
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400">Running</span>
+                    </div>
+                  </div>
                 </div>
               )}
 

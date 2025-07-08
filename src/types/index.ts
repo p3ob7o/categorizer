@@ -1,12 +1,3 @@
-export interface ProcessingStatus {
-  totalWords: number
-  processedWords: number
-  currentWord: string
-  isProcessing: boolean
-  error?: string
-  results: ProcessedWord[]
-}
-
 export interface ProcessedWord {
   originalWord: string
   language: string
@@ -21,12 +12,6 @@ export interface Language {
   priority: number
   createdAt: string
   updatedAt: string
-}
-
-export interface UploadedFiles {
-  categories: string[]
-  languages: string[]
-  words: string[]
 }
 
 export interface ProcessingResult {

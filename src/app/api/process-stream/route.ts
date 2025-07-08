@@ -5,7 +5,7 @@ import { prisma, withRetry, withConnection, safeDisconnect } from '@/lib/db'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { mode = 'batch', model = 'gpt-4o-mini', langPrompt, catPrompt, wordIds } = body
+    const { mode = 'batch', model = 'gpt-4o-mini', langPrompt, catPrompt, wordIds, onlyUnprocessed = false } = body
 
     // Get data from database with connection management and retry logic
     const [categories, languages] = await withConnection(async () => {
@@ -23,18 +23,27 @@ export async function POST(request: NextRequest) {
 
     // Get words based on filters
     const words = await withConnection(async () => {
+      let whereClause: any = {}
+      
       if (wordIds && wordIds.length > 0) {
-        return prisma.word.findMany({
-          where: { id: { in: wordIds } },
-          include: { language: true },
-          orderBy: { word: 'asc' }
-        })
-      } else {
-        return prisma.word.findMany({
-          include: { language: true },
-          orderBy: { word: 'asc' }
-        })
+        whereClause.id = { in: wordIds }
       }
+      
+      if (onlyUnprocessed) {
+        whereClause.OR = [
+          { languageId: null },
+          { englishTranslation: null },
+          { category: null },
+          { englishTranslation: '' },
+          { category: '' }
+        ]
+      }
+      
+      return prisma.word.findMany({
+        where: whereClause,
+        include: { language: true },
+        orderBy: { word: 'asc' }
+      })
     })
 
     if (!words.length) {
